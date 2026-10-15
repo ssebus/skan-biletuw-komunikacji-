@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Auto Transit Pass Inspector</title>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <style>
+        :root {
+            --bg: #030712;
+            --panel: #0f172a;
+            --border: #1e293b;
+            --accent: #3b82f6;
+            --success: #22c55e;
+            --danger: #ef4444;
+            --warning: #eab308;
+            --text: #f8fafc;
+            --muted: #94a3b8;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 16px;
+        }
+
+        h1 { font-size: 1.15rem; margin-bottom: 2px; text-align: center; }
+        p.sub { font-size: 0.7rem; color: var(--muted); margin-bottom: 14px; text-align: center; }
+
+        .container {
+            width: 100%;
+            max-width: 400px;
+            background: var(--panel);
+            border-radius: 16px;
+            padding: 16px;
+            border: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+        }
+
+        /* Wizjer z ramką i animowanym laserem */
+        .viewfinder-box {
+            position: relative;
+            width: 100%;
+            height: 250px;
+            background: #000;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 2px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        video, canvas {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        .scan-mask {
+            position: absolute;
+            width: 80%;
+            height: 120px;
+            border: 2px solid var(--accent);
+            border-radius: 10px;
+            box-shadow: 0 0 0 1000px rgba(0, 0, 0, 0.4);
+            pointer-events: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .laser-line {
+            position: absolute;
+            width: 100%;
+            height: 2px;
+            background: var(--success);
+            box-shadow: 0 0 10px var(--success);
+            animation: moveLaser 2s infinite ease-in-out;
+        }
+
+        @keyframes moveLaser {
+            0%, 100% { top: 10%; }
+            50% { top: 90%; }
+        }
+
+        /* Status / Wynik główny */
+        .status-badge {
+            padding: 14px;
+            border-radius: 10px;
+            font-weight: 700;
+            text-align: center;
+            font-size: 1.05rem;
+            display: none;
+        }
+        .status-badge.valid { background: var(--success); color: white; animation: pulse-green 1.5s infinite; }
+        .status-badge.invalid { background: var(--danger); color: white; animation: shake 0.4s; }
+        .status-badge.unknown { background: var(--warning); color: #000; }
+        .status-badge.not-ticket { background: #475569; color: white; }
+
+        @keyframes pulse-green {
+            0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4); }
+            70% { box-shadow: 0 0 0 12px rgba(34, 197, 94, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-5px); }
+            40%, 80% { transform: translateX(5px); }
+        }
+
+        /* Tabela wykrytych danych */
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+            background: rgba(15, 23, 42, 0.6);
+            border-radius: 8px;
+            overflow: hidden;
+            display: none;
+        }
+        .data-table th, .data-table td {
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--border);
+            text-align: left;
+        }
+        .data-table th { color: var(--muted); width: 40%; font-weight: 500; }
+        .data-table td { color: #fff; font-weight: 600; }
+        .data-table tr:last-child td { border-bottom: none; }
+
+        /* Przycisk robienia zdjęcia / skanowania */
+        .capture-btn {
+            background: var(--accent);
+            color: white;
+            border: none;
+            padding: 14px;
+            border-radius: 12px;
+            font-weight: 700;
+            font-size: 1rem;
+            cursor: pointer;
+            width: 100%;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+        }
+        .capture-btn:active { transform: scale(0.98); }
+    </style>
+</head>
+<body>
+
+    <h1>Auto Transit Inspector</h1>
+    <p class="sub">Zrób zdjęcie kodu – aplikacja sama zdecyduje o ważności biletu</p>
+
+    <div class="container">
+        <!-- Wizjer aparatów -->
+        <div class="viewfinder-box">
+            <video id="videoEl" autoplay playsinline muted></video>
+            <canvas id="canvasEl" style="display:none;"></canvas>
+            <div class="scan-mask">
+                <div class="laser-line"></div>
+            </div>
+            <div id="camMsg" style="position:absolute; color:var(--muted); font-size:0.8rem; z-index:5; text-align:center; padding:0 20px;">
+                Uruchamianie aparatu...
+            </div>
+        </div>
+
+        <!-- Wynik decyzji aplikacji -->
+        <div id="statusBadge" class="status-badge">Oczekiwanie na skan...</div>
+
+        <!-- Tabela wyłącznie z faktycznie znalezionymi danymi -->
+        <table id="resultTable" class="data-table">
+            <tbody id="tableBody"></tbody>
+        </table>
+
+        <!-- Przycisk wyzwalający "Zrób zdjęcie / Skanuj" -->
+        <button class="capture-btn" onclick="captureAndScan()">📸 Zrób zdjęcie i sprawdź kod</button>
+    </div>
+
+    <script>
+        let video = document.getElementById('videoEl');
+        let canvas = document.getElementById('canvasEl');
+        let ctx = canvas.getContext('2d');
+
+        // Dzisiejsza data systemowa: 15 października 2026
+        const TODAY = new Date(2026, 9, 15);
+
+        // Uruchomienie aparatu od razu po załadowaniu strony
+        async function initCamera() {
+            try {
+                let stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+                video.srcObject = stream;
+                video.play();
+                document.getElementById('camMsg').style.display = 'none';
+            } catch(e) {
+                document.getElementById('camMsg').innerText = "Brak dostępu do aparatu. Sprawdź uprawnienia.";
+            }
+        }
+        initCamera();
+
+        // Sygnały dźwiękowe
+        function playSound(type) {
+            try {
+                let ac = new (window.AudioContext || window.webkitAudioContext)();
+                let osc = ac.createOscillator();
+                let g = ac.createGain();
+                osc.connect(g); g.connect(ac.destination);
+                if(type === 'valid') {
+                    osc.frequency.setValueAtTime(587.33, ac.currentTime);
+                    osc.frequency.setValueAtTime(880, ac.currentTime + 0.1);
+                    g.gain.setValueAtTime(0.1, ac.currentTime);
+                    osc.start(); osc.stop(ac.currentTime + 0.3);
+                } else if(type === 'invalid') {
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(150, ac.currentTime);
+                    g.gain.setValueAtTime(0.15, ac.currentTime);
+                    osc.start(); osc.stop(ac.currentTime + 0.35);
+                } else {
+                    osc.frequency.setValueAtTime(350, ac.currentTime);
+                    g.gain.setValueAtTime(0.1, ac.currentTime);
+                    osc.start(); osc.stop(ac.currentTime + 0.25);
+                }
+            } catch(e) {}
+        }
+
+        // Kliknięcie "Zrób zdjęcie i sprawdź"
+        function captureAndScan() {
+            if (video.readyState !== video.HAVE_ENOUGH_DATA) {
+                alert("Aparat nie jest jeszcze gotowy.");
+                return;
+            }
+
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            let imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            let qrCode = jsQR(imgData.data, imgData.width, imgData.height);
+
+            if (qrCode) {
+                // Przeanalizuj to, co aplikacja faktycznie odczytała z kodu
+                evaluateTicket(qrCode.data);
+            } else {
+                // Nie znaleziono kodu w kadrze
+                showDecision("not-ticket", {
+                    "Wynik skanowania": "Nie wykryto kodu QR / kreskowego w ramce",
+                    "Wskazówka": "Spróbuj zbliżyć telefon lub wyostrzyć obraz"
+                });
+            }
+        }
+
+        // Automatyczna decyzja algorytmu
+        function evaluateTicket(text) {
+            let fields = {};
+            let decision = "unknown";
+
+            // 1. Sprawdzenie, czy treść kodu w ogóle dotyczy transportu / biletów w Niemczech
+            let isTransitTicket = text.includes("DB") || text.includes("TICKET") || text.includes("FAHRKARTE") || 
+                                  text.includes("VRM") || text.includes("SUB") || text.includes("VALID") ||
+                                  text.length > 20; // Dłuższe ciągi znaków w kodach Aztec/QR
+
+            if (!isTransitTicket) {
+                showDecision("not-ticket", {
+                    "Odczytany kod": text.substring(0, 30) + "...",
+                    "Decyzja": "⚠️ To nie jest bilet komunikacyjny!"
+                });
+                return;
+            }
+
+            // 2. Wyciąganie wyłącznie istniejących danych
+            fields["Typ odczytu"] = "Kod rozpoznany jako bilet";
+
+            let idMatch = text.match(/(?:ID|No|SubID|Num)[:\s]+([A-Za-z0-9\-]+)/i);
+            if (idMatch) {
+                fields["Numer / ID"] = idMatch[1];
+            }
+
+            let nameMatch = text.match(/(?:Name|Nazwisko)[:\s]+([A-Za-zĄĆĘŁŃÓŚŹŻąćęłńóśźż\s]+)(?:;|$)/i);
+            if (nameMatch) {
+                fields["Pasażer"] = nameMatch[1].trim();
+            }
+
+            // 3. Automatyczne wykrywanie daty i ocena ważności względem dzisiejszego dnia (15.10.2026)
+            let dateRegex = /(\d{2})\.(\d{2})\.(\d{4})/g;
+            let dates = [...text.matchAll(dateRegex)];
+
+            if (dates.length > 0) {
+                let dMatch = dates[dates.length - 1]; // Weź ostatnią datę (często data końca ważności)
+                let day = parseInt(dMatch[1]);
+                let month = parseInt(dMatch[2]) - 1;
+                let year = parseInt(dMatch[3]);
+                let ticketExpiry = new Date(year, month, day, 23, 59, 59);
+
+                fields["Data z biletu"] = `${dMatch[1]}.${dMatch[2]}.${dMatch[3]}`;
+
+                // Samodzielna decyzja aplikacji
+                if (ticketExpiry >= TODAY) {
+                    decision = "valid";
+                    fields["Status"] = "Ważny (Data aktualna)";
+                } else {
+                    decision = "invalid";
+                    fields["Status"] = "Przeterminowany (Termin minął)";
+                }
+            } else {
+                // Jeśli kod jest biletowy, ale nie ma w nim jawnej daty w formacie tekstowym (np. zaszyfrowany bilet DB)
+                if (text.includes("DB") || text.includes("TICKET")) {
+                    decision = "valid";
+                    fields["Status"] = "Ważny (Zaszyfrowany bilet cyfrowy)";
+                } else {
+                    decision = "unknown";
+                    fields["Status"] = "Niepewny – brak czytelnej daty w kodzie";
+                }
+            }
+
+            showDecision(decision, fields);
+        }
+
+        // Wyświetlanie wyniku i dźwięków
+        function showDecision(status, fields) {
+            let badge = document.getElementById('statusBadge');
+            badge.style.display = 'block';
+            badge.className = 'status-badge ' + status;
+
+            if (status === 'valid') {
+                badge.innerText = '🟢 GIT – Bilet jest WAŻNY';
+                playSound('valid');
+            } else if (status === 'invalid') {
+                badge.innerText = '🔴 NIEWAŻNY – Bilet przeterminowany';
+                playSound('invalid');
+            } else if (status === 'unknown') {
+                badge.innerText = '🟡 NIE WIEM / Nie jestem pewien';
+                playSound('unknown');
+            } else {
+                badge.innerText = '⚠️ TO NIE JEST BILET KOMUNIKACYJNY';
+                playSound('invalid');
+            }
+
+            let tbody = document.getElementById('tableBody');
+            tbody.innerHTML = '';
+
+            for (let [key, val] of Object.entries(fields)) {
+                tbody.innerHTML += `<tr><th>${key}</th><td>${val}</td></tr>`;
+            }
+
+            document.getElementById('resultTable').style.display = 'table';
+        }
+    </script>
+</body>
+</html>
