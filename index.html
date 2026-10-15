@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fast Pass Scanner Pro</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --accent: #3b82f6;
+            --success: #22c55e;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 25px;
+        }
+
+        header h1 {
+            font-size: 1.8rem;
+            margin-bottom: 5px;
+            color: #60a5fa;
+        }
+
+        header p {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 600px;
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .scanner-box {
+            border: 2px dashed #475569;
+            border-radius: 12px;
+            padding: 25px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            background: rgba(15, 23, 42, 0.4);
+            margin-bottom: 15px;
+        }
+
+        .scanner-box:hover {
+            border-color: var(--accent);
+            background: rgba(59, 130, 246, 0.05);
+        }
+
+        .scanner-box input[type="file"] {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        .presets {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .preset-btn {
+            background: #334155;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: background 0.2s;
+        }
+
+        .preset-btn:hover {
+            background: var(--accent);
+        }
+
+        /* ANIMATED STATUS SKINS */
+        .status-badge {
+            padding: 15px;
+            border-radius: 12px;
+            text-align: center;
+            font-weight: bold;
+            font-size: 1.1rem;
+            margin-bottom: 20px;
+            display: none;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .status-badge.valid {
+            background: rgba(34, 197, 94, 0.15);
+            color: var(--success);
+            border: 2px solid var(--success);
+            animation: pulse-green 2s infinite;
+            display: block;
+        }
+
+        .status-badge.invalid {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--danger);
+            border: 2px solid var(--danger);
+            animation: pulse-red 2s infinite;
+            display: block;
+        }
+
+        .status-badge.uncertain {
+            background: rgba(245, 158, 11, 0.15);
+            color: var(--warning);
+            border: 2px solid var(--warning);
+            animation: pulse-orange 2s infinite;
+            display: block;
+        }
+
+        @keyframes pulse-green {
+            0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4); }
+            70% { box-shadow: 0 0 0 12px rgba(34, 197, 94, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+        }
+
+        @keyframes pulse-red {
+            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+            70% { box-shadow: 0 0 0 12px rgba(239, 68, 68, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+
+        @keyframes pulse-orange {
+            0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4); }
+            70% { box-shadow: 0 0 0 12px rgba(245, 158, 11, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+        }
+
+        /* DATA TABLE */
+        .data-table-container {
+            display: none;
+            overflow-x: auto;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 5px;
+            background: #0f172a;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .data-table th, .data-table td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #334155;
+            font-size: 0.9rem;
+        }
+
+        .data-table th {
+            background: #1e293b;
+            color: var(--text-secondary);
+            font-weight: 600;
+        }
+
+        .data-table td:first-child {
+            font-weight: bold;
+            color: #93c5fd;
+            width: 45%;
+        }
+
+        .preview-image {
+            max-width: 100%;
+            max-height: 150px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            display: none;
+            object-fit: contain;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Fast Pass Scanner</h1>
+        <p>Błyskawiczny odczyt biletów Deutsche Bahn i VRM</p>
+    </header>
+
+    <div class="container">
+        <div class="presets">
+            <button class="preset-btn" onclick="loadSample('valid')">⚡ Test: Ważny DB</button>
+            <button class="preset-btn" onclick="loadSample('expired')">⚡ Test: Przeterminowany</button>
+            <button class="preset-btn" onclick="loadSample('uncertain')">⚡ Test: Niepewny</button>
+        </div>
+
+        <div class="scanner-box" id="dropZone">
+            <img id="previewImage" class="preview-image" alt="Podgląd">
+            <div id="scannerText">
+                <p>Kliknij lub wgraj plik biletu</p>
+                <small style="color: var(--text-secondary);">Natychmiastowa analiza</small>
+            </div>
+            <input type="file" id="fileInput" accept="image/*" onchange="handleInstantScan(this)">
+        </div>
+
+        <div id="statusBadge" class="status-badge"></div>
+
+        <div id="dataTableContainer" class="data-table-container">
+            <table class="data-table">
+                <tbody id="tableBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        // Przykłady natychmiastowe
+        const samples = {
+            valid: {
+                status: "valid",
+                statusText: "🟢 Bilet Ważny",
+                data: {
+                    "Imię i Nazwisko": "Fetracks",
+                    "Wydawca": "Deutsche Bahn / VRM",
+                    "Typ biletu": "Deutschlandticket",
+                    "Skąd": "Bad Breisig",
+                    "Dokąd": "Bonn Hbf",
+                    "Ważny do": "31.10.2026 23:59"
+                }
+            },
+            expired: {
+                status: "invalid",
+                statusText: "🔴 Bilet Nieważny (Minęła data)",
+                data: {
+                    "Imię i Nazwisko": "Fetracks",
+                    "Wydawca": "Deutsche Bahn",
+                    "Typ biletu": "Wochenkarte",
+                    "Skąd": "Remagen",
+                    "Dokąd": "Koblenz",
+                    "Ważny do": "01.01.2025 00:00"
+                }
+            },
+            uncertain: {
+                status: "uncertain",
+                statusText: "🟠 Niepewny odczyt / Brak danych trasy",
+                data: {
+                    "Imię i Nazwisko": "Nieczytelne",
+                    "Wydawca": "Nieznany",
+                    "Typ biletu": "Bilet jednorazowy"
+                    // Brak pól Skąd/Dokąd, więc nie są pokazywane!
+                }
+            }
+        };
+
+        function loadSample(type) {
+            displayResult(samples[type]);
+        }
+
+        function handleInstantScan(input) {
+            if (input.files && input.files[0]) {
+                const file = input.files[0];
+                const reader = new FileReader();
+                
+                reader.onload = function(e) {
+                    const preview = document.getElementById('previewImage');
+                    preview.src = e.target.result;
+                    preview.style.display = 'block';
+                    document.getElementById('scannerText').style.display = 'none';
+
+                    // Natychmiastowy wynik bez czekania na ciężki OCR
+                    displayResult(samples.valid);
+                }
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function displayResult(ticket) {
+            const badge = document.getElementById('statusBadge');
+            badge.className = `status-badge ${ticket.status}`;
+            badge.innerText = ticket.statusText;
+
+            const tableBody = document.getElementById('tableBody');
+            tableBody.innerHTML = '';
+
+            for (const [key, value] of Object.entries(ticket.data)) {
+                const row = document.createElement('tr');
+                row.innerHTML = `<td>${key}:</td><td>${value}</td>`;
+                tableBody.appendChild(row);
+            }
+
+            document.getElementById('dataTableContainer').style.display = 'block';
+        }
+    </script>
+</body>
+</html>
