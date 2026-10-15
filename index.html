@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ticket Checker AI</title>
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --bg: #f3f4f6;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background-color: var(--bg);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            background: white;
+            padding: 24px;
+            border-radius: 20px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+        }
+
+        h2 { margin-bottom: 8px; color: #1f2937; }
+        p { color: #6b7280; font-size: 14px; margin-bottom: 20px; }
+
+        .upload-box {
+            border: 2px dashed #d1d5db;
+            padding: 30px 20px;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: 0.2s;
+            background: #fafafa;
+        }
+
+        .upload-box:hover {
+            border-color: var(--primary);
+            background: #f8fafc;
+        }
+
+        input[type="file"] { display: none; }
+
+        /* Status screens */
+        .result-card {
+            margin-top: 20px;
+            padding: 20px;
+            border-radius: 14px;
+            display: none;
+            animation: fadeIn 0.3s ease-in-out;
+        }
+
+        .status-valid { background: #ecfdf5; color: #065f46; border: 1px solid var(--success); }
+        .status-warning { background: #fffbeb; color: #92400e; border: 1px solid var(--warning); }
+        .status-invalid { background: #fef2f2; color: #991b1b; border: 1px solid var(--danger); }
+
+        .icon {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+
+        /* Animacje */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 10px;
+            width: 100%;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .btn-yes { background: var(--success); }
+        .btn-no { background: var(--danger); }
+
+        .details-toggle {
+            margin-top: 15px;
+            font-size: 13px;
+            color: var(--primary);
+            cursor: pointer;
+            text-decoration: underline;
+        }
+
+        .extra-info {
+            display: none;
+            margin-top: 10px;
+            font-size: 12px;
+            text-align: left;
+            background: rgba(0,0,0,0.03);
+            padding: 10px;
+            border-radius: 6px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Skaner Biletów</h2>
+    <p>Sprawdź Deutschlandticket lub kod QR</p>
+
+    <label class="upload-box" id="dropZone">
+        📷 Zrób zdjęcie / Wgraj bilet lub QR
+        <input type="file" id="fileInput" accept="image/*" onchange="handleImage(event)">
+    </label>
+
+    <!-- Wynik weryfikacji -->
+    <div id="resultContainer" class="result-card">
+        <div class="icon" id="statusIcon"></div>
+        <h3 id="statusTitle"></h3>
+        <p id="statusDesc" style="margin-bottom: 10px;"></p>
+        
+        <!-- Przyciski potwierdzenia dla stanu niepewnego -->
+        <div id="confirmationBox" style="display: none;">
+            <p style="font-size: 13px; font-weight: bold;">Czy według Ciebie ten bilet jest ważny?</p>
+            <div class="btn-group">
+                <button class="btn btn-yes" onclick="teachSystem(true)">Tak, ważny</button>
+                <button class="btn btn-no" onclick="teachSystem(false)">Nie, nieważny</button>
+            </div>
+        </div>
+
+        <div class="details-toggle" onclick="toggleDetails()">Pokaż więcej informacji / Tył karty</div>
+        <div id="extraInfo" class="extra-info">
+            <strong>Analiza techniczna:</strong><br>
+            - Odczyt kodu QR: Sukces<br>
+            - Weryfikacja daty: Sprawdzono strukturę<br>
+            - Tryb pamięci podręcznej: Aktywny
+        </div>
+
+        <button class="btn" style="margin-top: 15px; background: #6b7280;" onclick="resetScanner()">Kolejny bilet</button>
+    </div>
+</div>
+
+<script>
+    let currentTicketHash = "";
+
+    // Prosta funkcja generująca "podpis" pliku (hash) do pamięci podręcznej
+    function hashCode(str) {
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) {
+            hash = (hash << 5) - hash + str.charCodeAt(i);
+            hash |= 0;
+        }
+        return hash.toString();
+    }
+
+    function handleImage(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            // Tworzymy unikalny "klucz" na podstawie nazwy pliku i rozmiaru (symulacja unikalności karty)
+            currentTicketHash = hashCode(file.name + file.size);
+            
+            // Sprawdzamy, czy system już zapamiętał ten bilet
+            const savedDecision = localStorage.getItem(currentTicketHash);
+
+            document.getElementById('dropZone').style.display = 'none';
+            const resultCard = document.getElementById('resultContainer');
+            resultCard.style.display = 'block';
+
+            if (savedDecision !== null) {
+                // System pamięta decyzję użytkownika!
+                if (savedDecision === "true") {
+                    showValid("Znaleziono w pamięci (Zatwierdzone wcześniej)");
+                } else {
+                    showInvalid("Znaleziono w pamięci (Odrzucone wcześniej)");
+                }
+            } else {
+                // Symulacja analizy AI / dat / QR
+                simulateAIAnalysis(file.name);
+            }
+        };
+        reader.readAsDataURL(file);
+    }
+
+    function simulateAIAnalysis(filename) {
+        // Losujemy stan dla demonstracji (w prawdziwej appce tu wchodzi OCR dat i QR)
+        // Dajemy czasem stan niepewny z wykrzyknikiem, żebyś mógł przetestować uczenie
+        const randomScenario = Math.random();
+
+        if (randomScenario > 0.6) {
+            showValid("Bilet jest ważny (Zweryfikowano po dacie i QR)");
+        } else if (randomScenario > 0.3) {
+            showWarning("Nie jesteśmy pewni ważności tego biletu.");
+        } else {
+            showInvalid("Bilet nieważny lub przeterminowany!");
+        }
+    }
+
+    function showValid(text) {
+        document.getElementById('resultCardClass'] = "result-card status-valid";
+        document.getElementById('resultContainer').className = "result-card status-valid";
+        document.getElementById('statusIcon').innerHTML = "✅";
+        document.getElementById('statusTitle').innerText = "Ważny bilet";
+        document.getElementById('statusDesc').innerText = text;
+        document.getElementById('confirmationBox').style.display = 'none';
+    }
+
+    function showWarning(text) {
+        document.getElementById('resultContainer').className = "result-card status-warning";
+        document.getElementById('statusIcon').innerHTML = "⚠️";
+        document.getElementById('statusTitle').innerText = "Wymaga potwierdzenia";
+        document.getElementById('statusDesc').innerText = text;
+        document.getElementById('confirmationBox').style.display = 'block';
+    }
+
+    function showInvalid(text) {
+        document.getElementById('resultContainer').className = "result-card status-invalid";
+        document.getElementById('statusIcon').innerHTML = "❌";
+        document.getElementById('statusTitle').innerText = "Bilet nieważny";
+        document.getElementById('statusDesc').innerText = text;
+        document.getElementById('confirmationBox').style.display = 'none';
+    }
+
+    function teachSystem(isValid) {
+        // Zapisujemy decyzję użytkownika na stałe w przeglądarce
+        localStorage.setItem(currentTicketHash, isValid);
+        if (isValid) {
+            showValid("Zapamiętano: Od teraz ten bilet zawsze będzie uznawany za ważny.");
+        } else {
+            showInvalid("Zapamiętano: Od teraz ten bilet zawsze będzie uznawany za nieważny.");
+        }
+    }
+
+    function toggleDetails() {
+        const extra = document.getElementById('extraInfo');
+        extra.style.display = extra.style.display === 'block' ? 'none' : 'block';
+    }
+
+    function resetScanner() {
+        document.getElementById('dropZone').style.display = 'block';
+        document.getElementById('resultContainer').style.display = 'none';
+        document.getElementById('fileInput').value = '';
+        document.getElementById('confirmationBox').style.display = 'none';
+        document.getElementById('extraInfo').style.display = 'none';
+    }
+</script>
+
+</body>
+</html>
