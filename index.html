@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>PassScan Extreme - Continuous Cam & NFC</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+        body {
+            background: linear-gradient(135deg, #1a051d, #2e0836, #0f0212);
+            color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 12px;
+        }
+
+        .app-container {
+            width: 100%;
+            max-width: 440px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            padding-bottom: 50px;
+        }
+
+        /* Nagłówek i Statystyki */
+        .header-card {
+            background: rgba(45, 10, 56, 0.75);
+            backdrop-filter: blur(14px);
+            border: 1px solid rgba(244, 114, 182, 0.2);
+            border-radius: 22px;
+            padding: 16px;
+            box-shadow: 0 15px 35px rgba(236, 72, 153, 0.2);
+        }
+        .app-title {
+            font-size: 1.15rem;
+            font-weight: 800;
+            margin: 0 0 12px 0;
+            color: #f472b6;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            text-align: center;
+        }
+        .stat-box {
+            background: rgba(20, 4, 26, 0.6);
+            border: 1px solid rgba(244, 114, 182, 0.1);
+            padding: 8px 4px;
+            border-radius: 14px;
+        }
+        .stat-num { font-size: 1.1rem; font-weight: bold; color: #34d399; }
+        .stat-lbl { font-size: 0.62rem; color: #f7a8d8; text-transform: uppercase; margin-top: 2px; font-weight: 700; }
+
+        /* Przełącznik trybów skanera */
+        .scan-mode-toggle {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+            background: rgba(20, 4, 26, 0.9);
+            padding: 5px;
+            border-radius: 14px;
+            border: 1px solid rgba(244, 114, 182, 0.2);
+            margin-bottom: 2px;
+        }
+        .scan-mode-btn {
+            background: transparent; border: none; color: #f7a8d8; padding: 9px;
+            font-size: 0.72rem; font-weight: bold; border-radius: 10px; cursor: pointer; transition: 0.2s;
+        }
+        .scan-mode-btn.active {
+            background: linear-gradient(135deg, #db2777, #f472b6);
+            color: white; box-shadow: 0 4px 12px rgba(219, 39, 119, 0.4);
+        }
+
+        /* Przełącznik Wejście / Wyjście */
+        .direction-toggle {
+            display: none;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+            background: rgba(20, 4, 26, 0.8);
+            padding: 4px;
+            border-radius: 12px;
+            border: 1px solid rgba(244, 114, 182, 0.15);
+        }
+        .dir-btn { background: transparent; border: none; color: #f7a8d8; padding: 8px; font-size: 0.75rem; font-weight: bold; border-radius: 10px; cursor: pointer; }
+        .dir-btn.active-in { background: #059669; color: white; }
+        .dir-btn.active-out { background: #dc2626; color: white; }
+
+        /* Zakładki główne */
+        .nav-tabs {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 5px;
+            background: rgba(20, 4, 26, 0.85);
+            padding: 5px;
+            border-radius: 16px;
+            border: 1px solid rgba(244, 114, 182, 0.15);
+        }
+        .tab-btn {
+            background: transparent; border: none; color: #f7a8d8; padding: 10px 2px;
+            font-size: 0.7rem; font-weight: bold; border-radius: 12px; cursor: pointer; transition: 0.2s;
+        }
+        .tab-btn.active {
+            background: linear-gradient(135deg, #db2777, #f472b6);
+            color: white; box-shadow: 0 4px 15px rgba(219, 39, 119, 0.5);
+        }
+
+        .panel { display: none; flex-direction: column; gap: 12px; }
+        .panel.active { display: flex; }
+
+        .card {
+            background: rgba(45, 10, 56, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(244, 114, 182, 0.15);
+            border-radius: 20px;
+            padding: 16px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+        }
+
+        /* Hybrydowy box: kamera w tle + nakładka NFC z paskiem postępu */
+        .cam-nfc-box {
+            width: 100%; height: 220px; background: #000; border-radius: 14px;
+            border: 2px solid #db2777; position: relative; overflow: hidden;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            cursor: pointer; user-select: none;
+        }
+        .cam-nfc-box video {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 1;
+        }
+        .nfc-overlay-ui {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(8, 2, 11, 0.65); backdrop-filter: blur(2px);
+            z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 15px;
+        }
+        .nfc-wave {
+            width: 60px; height: 60px; border-radius: 50%;
+            border: 2px solid #f472b6; animation: nfcPulse 1.4s infinite ease-out;
+            display: flex; align-items: center; justify-content: center; font-size: 1.5rem; color: #f472b6;
+        }
+        @keyframes nfcPulse {
+            0% { transform: scale(0.75); opacity: 1; box-shadow: 0 0 0 0 rgba(244, 114, 182, 0.5); }
+            100% { transform: scale(1.45); opacity: 0; box-shadow: 0 0 0 20px rgba(244, 114, 182, 0); }
+        }
+
+        /* Pasek postępu (linia postępu 2 sekundy) */
+        .hold-progress-container {
+            position: absolute; bottom: 0; left: 0; width: 100%; height: 5px; background: rgba(255,255,255,0.2); z-index: 3;
+        }
+        .hold-progress-fill {
+            height: 100%; background: #34d399; width: 0%; transition: width 0.05s linear;
+        }
+
+        /* Formularze i przyciski */
+        .form-group { margin-bottom: 10px; }
+        label { display: block; font-size: 0.72rem; color: #f7a8d8; margin-bottom: 4px; font-weight: bold; text-transform: uppercase; }
+        input, select, textarea {
+            width: 100%; background: rgba(15, 2, 18, 0.85); border: 1px solid #701a75;
+            color: white; padding: 10px 12px; border-radius: 12px; font-size: 0.9rem; outline: none;
+        }
+        input:focus, select:focus, textarea:focus { border-color: #f472b6; }
+        .btn {
+            background: linear-gradient(135deg, #db2777, #be185d); color: white; border: none;
+            padding: 12px; border-radius: 12px; font-size: 0.9rem; font-weight: bold; cursor: pointer;
+            width: 100%; box-shadow: 0 4px 15px rgba(219, 39, 119, 0.4); display: flex; align-items: center; justify-content: center; gap: 6px;
+        }
+        .btn:active { transform: scale(0.97); }
+        .btn-danger { background: linear-gradient(135deg, #ef4444, #991b1b); box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4); }
+        .btn-success { background: linear-gradient(135deg, #059669, #047857); box-shadow: 0 4px 15px rgba(5, 150, 105, 0.4); }
+
+        .ticket-list { display: flex; flex-direction: column; gap: 8px; max-height: 320px; overflow-y: auto; padding-right: 4px; }
+        .ticket-item {
+            background: rgba(20, 4, 26, 0.75); border: 1px solid rgba(244, 114, 182, 0.1);
+            padding: 10px 12px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center;
+        }
+        .ticket-code { font-family: monospace; font-size: 0.9rem; color: #f472b6; font-weight: bold; }
+        .ticket-meta { font-size: 0.68rem; color: #f7a8d8; }
+        .ticket-actions { display: flex; gap: 5px; }
+        .icon-btn {
+            background: #581c87; color: white; border: none; width: 30px; height: 30px;
+            border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.8rem;
+        }
+        .row-group { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+        /* Pełnoekranowe modale wyników */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.88); backdrop-filter: blur(12px);
+            display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 9999; padding: 20px;
+        }
+        .modal-card {
+            width: 100%; max-width: 380px; border-radius: 28px; padding: 30px 20px;
+            text-align: center; display: flex; flex-direction: column; align-items: center; gap: 16px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.8); position: relative;
+        }
+        .modal-success { background: linear-gradient(135deg, #064e3b, #022c22); border: 2px solid #34d399; }
+        .modal-error { background: linear-gradient(135deg, #7f1d1d, #450a0a); border: 2px solid #ef4444; }
+
+        .modal-icon-circle {
+            width: 90px; height: 90px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center; font-size: 2.5rem;
+        }
+        .success-circle { background: rgba(52, 211, 153, 0.2); color: #34d399; border: 2px solid #34d399; }
+        .error-circle { background: rgba(239, 68, 68, 0.2); color: #ef4444; border: 2px solid #ef4444; }
+
+        .modal-title { font-size: 1.4rem; font-weight: 900; margin: 0; text-transform: uppercase; }
+        .modal-code-txt { font-family: monospace; font-size: 1.2rem; background: rgba(0,0,0,0.4); padding: 8px 16px; border-radius: 10px; color: #fff; width: 100%; word-break: break-all; }
+        .modal-desc { font-size: 0.9rem; color: #cbd5e1; margin: 0; }
+        
+        .close-modal-btn {
+            background: rgba(255, 255, 255, 0.15); border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white; padding: 12px; border-radius: 14px; font-weight: bold; width: 100%; cursor: pointer;
+        }
+        .close-x-btn {
+            position: absolute; top: 15px; right: 15px; background: transparent; border: none;
+            color: white; font-size: 1.4rem; cursor: pointer; width: 36px; height: 36px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .timer-bar-container { width: 100%; height: 6px; background: rgba(255,255,255,0.2); border-radius: 3px; overflow: hidden; margin-top: 5px; }
+        .timer-bar-fill { width: 100%; height: 100%; background: white; animation: shrinkBar 5s linear forwards; }
+        @keyframes shrinkBar { from { width: 100%; } to { width: 0%; } }
+    </style>
+</head>
+<body>
+
+    <div class="app-container">
+        
+        <div class="header-card">
+            <div class="app-title">
+                <span>🎟️ PassScan Continuous & NFC</span>
+                <span id="db-count" style="font-size:0.75rem; color:#f7a8d8;">0 kodów</span>
+            </div>
+            <div class="stats-grid">
+                <div class="stat-box">
+                    <div class="stat-num" id="stat-total">0</div>
+                    <div class="stat-lbl">Baza</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-num" id="stat-scanned" style="color:#f472b6;">0</div>
+                    <div class="stat-lbl">Wejścia</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-num" id="stat-max">150</div>
+                    <div class="stat-lbl">Limit</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="nav-tabs">
+            <button class="tab-btn active" onclick="switchTab('scan')">📷 Skaner</button>
+            <button class="tab-btn" onclick="switchTab('generator')">⚡ Gen</button>
+            <button class="tab-btn" onclick="switchTab('database')">📋 Baza</button>
+            <button class="tab-btn" onclick="switchTab('settings')">⚙️ Ustaw</button>
+        </div>
+
+        <!-- PANEL SKANERA -->
+        <div class="panel active" id="panel-scan">
+            <div class="scan-mode-toggle">
+                <button class="scan-mode-btn active" id="btnFastScan" onclick="setScanMode('fast')">⚡ Szybki Skan (NFC)</button>
+                <button class="scan-mode-btn" id="btnAdvScan" onclick="setScanMode('advanced')">🔍 Zaawansowany (AI + NFC)</button>
+            </div>
+
+            <div class="direction-toggle" id="directionToggleBar">
+                <button class="dir-btn active-in" id="btnModeIn" onclick="setScanDirection('in')">📥 WEJŚCIE</button>
+                <button class="dir-btn" id="dirBtnOut" onclick="setScanDirection('out')">📤 WYJŚCIE</button>
+            </div>
+
+            <!-- SZYBKI SKAN: Ciągła kamera w tle + nakładka NFC z przytrzymaniem 2s -->
+            <div id="fast-scan-container" class="card">
+                <div class="cam-nfc-box" 
+                     onmousedown="startHoldNFC('fast')" 
+                     onmouseup="endHoldNFC()" 
+                     ontouchstart="startHoldNFC('fast')" 
+                     ontouchend="endHoldNFC()">
+                    <video id="fast-bg-video" autoplay playsinline muted></video>
+                    <div class="nfc-overlay-ui">
+                        <div class="nfc-wave">📶</div>
+                        <div style="font-size: 0.75rem; color: #f7a8d8; font-weight: bold; text-align: center;">
+                            Przyłóż kartę do górnej części telefonu, by sprawdzić sygnał NFC
+                        </div>
+                        <div style="font-size: 0.65rem; color: #cbd5e1; font-style: italic;">(Przytrzymaj 2 sekundy)</div>
+                    </div>
+                    <div class="hold-progress-container">
+                        <div class="hold-progress-fill" id="fast-hold-bar"></div>
+                    </div>
+                </div>
+                <div style="margin-top: 8px; font-size: 0.65rem; color: #f7a8d8; text-align: center;">
+                    Dotknij i przytrzymaj powyższy obszar, aby przetestować sygnał NFC.
+                </div>
+            </div>
+
+            <!-- ZAAWANSOWANY SKAN -->
+            <div id="adv-scan-container" class="card" style="display: none;">
+                <div style="background: rgba(15,2,18,0.8); padding: 10px; border-radius: 12px; margin-bottom: 10px; text-align: center; border: 1px dashed #f472b6;">
+                    <div id="adv-step-title" style="font-weight: bold; color: #34d399; font-size: 0.85rem;">Krok 1: Skanowanie PRZODU biletu/karty</div>
+                    <div id="adv-step-desc" style="font-size: 0.7rem; color: #cbd5e1; margin-top: 3px;">Użyj tylnego aparatu (analiza imienia, nazwiska, daty i rezerwacji).</div>
+                </div>
+
+                <div id="adv-view-box" style="width: 100%; height: 220px; background: #000; border-radius: 14px; overflow: hidden; position: relative; margin-bottom: 10px; display: flex; align-items: center; justify-content: center;">
+                    <video id="adv-video" autoplay playsinline muted style="width: 100%; height: 100%; object-fit: cover;"></video>
+                </div>
+
+                <div style="display: flex; gap: 6px;" id="adv-buttons-box">
+                    <button class="btn btn-success" id="adv-action-btn" onclick="handleAdvStep()">📸 Skanuj i Potwierdź Przód</button>
+                    <button class="btn btn-danger" onclick="stopAdvancedScanner()">Anuluj</button>
+                </div>
+            </div>
+
+            <div class="card">
+                <label>Wpisz kod ręcznie:</label>
+                <div style="display: flex; gap: 6px;">
+                    <input type="text" id="manual-input-code" placeholder="Wprowadź kod...">
+                    <button class="btn" onclick="verifyTicket(document.getElementById('manual-input-code').value, false)" style="width: 100px;">Sprawdź</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel" id="panel-generator">
+            <div class="card">
+                <h3 style="margin: 0 0 10px 0; font-size: 0.95rem; color: #f472b6;">✨ Generator Kodów</h3>
+                <div class="row-group">
+                    <div class="form-group">
+                        <label>Typ:</label>
+                        <select id="gen-type">
+                            <option value="alphanumeric">Litery + Cyfry</option>
+                            <option value="numeric">Tylko Cyfry</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Długość:</label>
+                        <input type="number" id="gen-length" value="8" min="4" max="20">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Ilość sztuk:</label>
+                    <input type="number" id="gen-count" value="10" min="1" max="500">
+                </div>
+                <button class="btn btn-success" onclick="generateBatchCodes()">⚡ Wygeneruj</button>
+            </div>
+        </div>
+
+        <div class="panel" id="panel-database">
+            <div class="card">
+                <div class="form-group" style="margin-bottom: 8px;">
+                    <input type="text" id="search-input" placeholder="🔍 Szukaj kodu..." oninput="updateUI()">
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <span style="font-size: 0.75rem; color: #f7a8d8;">Lista biletów</span>
+                    <button class="btn btn-danger" onclick="clearAllTickets()" style="padding: 4px 8px; font-size: 0.68rem; width: auto;">Wyczyść</button>
+                </div>
+                <div class="ticket-list" id="ticketListContainer"></div>
+            </div>
+        </div>
+
+        <div class="panel" id="panel-settings">
+            <div class="card">
+                <h3 style="margin: 0 0 12px 0; font-size: 0.95rem; color: #f472b6;">⚙️ Ustawienia</h3>
+                <div class="form-group">
+                    <label>Dozwolone wejścia na kod:</label>
+                    <select id="setting-max-uses" onchange="saveSettings()">
+                        <option value="1">1 raz</option>
+                        <option value="2">2 razy</option>
+                        <option value="999999" selected>Nieskończoność</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Obsługa wychodzenia:</label>
+                    <select id="setting-enable-exit" onchange="saveSettings()">
+                        <option value="off">Wyłączone</option>
+                        <option value="on">Włączone</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Dźwięki:</label>
+                    <select id="setting-sound" onchange="saveSettings()">
+                        <option value="on">Włączone</option>
+                        <option value="off">Wyłączone</option>
+                    </select>
+                </div>
+                <button class="btn btn-success" onclick="alert('Zapisano!')" style="margin-top: 10px;">💾 Zapisz</button>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Modale wyników -->
+    <div id="modal-success" class="modal-overlay">
+        <div class="modal-card modal-success">
+            <button class="close-x-btn" onclick="closeModal()">✕</button>
+            <div class="modal-icon-circle success-circle">✓</div>
+            <div class="modal-title" style="color: #34d399;">BILET / KARTA WAŻNA!</div>
+            <div class="modal-code-txt" id="success-code-display">ABC12345</div>
+            <div class="modal-desc" id="success-desc-text">Weryfikacja zakończona sukcesem.</div>
+            <button class="close-modal-btn" onclick="closeModal()">Zamknij (5s)</button>
+            <div class="timer-bar-container"><div class="timer-bar-fill" id="success-timer-bar"></div></div>
+        </div>
+    </div>
+
+    <div id="modal-error" class="modal-overlay">
+        <div class="modal-card modal-error">
+            <button class="close-x-btn" onclick="closeModal()">✕</button>
+            <div class="modal-icon-circle error-circle">✕</div>
+            <div class="modal-title" style="color: #ef4444;" id="error-title-text">BŁĄD SYGNAŁU NFC!</div>
+            <div class="modal-code-txt" id="error-code-display">ABC12345</div>
+            <div class="modal-desc" id="error-desc-text">Sygnał przerwany. Przytrzymaj kartę ponownie, aż linia dojędzie do końca!</div>
+            <button class="close-modal-btn" onclick="closeModal()">Zamknij (5s)</button>
+            <div class="timer-bar-container"><div class="timer-bar-fill" id="error-timer-bar"></div></div>
+        </div>
+    </div>
+
+    <script>
+        let tickets = JSON.parse(localStorage.getItem('passextreme_tickets')) || [
+            { code: "LIVE-PASS-2026", uses: 0, maxUses: 999999 }
+        ];
+
+        let settings = JSON.parse(localStorage.getItem('passextreme_settings')) || {
+            maxUses: 999999,
+            sound: "on",
+            enableExit: "off"
+        };
+
+        let currentDirection = "in";
+        let modalTimeout = null;
+
+        // Zaawansowany skan (Krok 1: Przód, Krok 2: Tył [Real AI], Krok 3: NFC [Fake z 2s paskiem])
+        let advStep = 1;
+        let advStream = null;
+        let globalCamStream = null;
+        let holdTimer = null;
+        let holdDuration = 2000; // 2 sekundy
+
+        window.onload = () => {
+            loadSettingsToUI();
+            updateUI();
+            startContinuousCamera();
+        };
+
+        // Uruchomienie ciągłej kamery w tle dla szybkiego skanu (nie wyłącza się po sekundzie)
+        async function startContinuousCamera() {
+            try {
+                if (globalCamStream) {
+                    globalCamStream.getTracks().forEach(t => t.stop());
+                }
+                globalCamStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+                let fastVideo = document.getElementById('fast-bg-video');
+                if (fastVideo) {
+                    fastVideo.srcObject = globalCamStream;
+                }
+            } catch(e) {}
+        }
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            
+            stopAdvancedScanner();
+
+            if(tabId === 'scan') {
+                document.getElementById('panel-scan').classList.add('active');
+                event.target.classList.add('active');
+                if(document.getElementById('fast-scan-container').style.display !== 'none') {
+                    startContinuousCamera();
+                }
+            } else {
+                if (globalCamStream) {
+                    globalCamStream.getTracks().forEach(t => t.stop());
+                    globalCamStream = null;
+                }
+                if(tabId === 'generator') document.getElementById('panel-generator').classList.add('active');
+                if(tabId === 'database') document.getElementById('panel-database').classList.add('active');
+                if(tabId === 'settings') document.getElementById('panel-settings').classList.add('active');
+                event.target.classList.add('active');
+            }
+        }
+
+        function loadSettingsToUI() {
+            document.getElementById('setting-max-uses').value = settings.maxUses;
+            document.getElementById('setting-sound').value = settings.sound;
+            document.getElementById('setting-enable-exit').value = settings.enableExit;
+            let toggleBar = document.getElementById('directionToggleBar');
+            toggleBar.style.display = (settings.enableExit === "on") ? "grid" : "none";
+        }
+
+        function saveSettings() {
+            settings.maxUses = parseInt(document.getElementById('setting-max-uses').value);
+            settings.sound = document.getElementById('setting-sound').value;
+            settings.enableExit = document.getElementById('setting-enable-exit').value;
+            localStorage.setItem('passextreme_settings', JSON.stringify(settings));
+            loadSettingsToUI();
+            updateUI();
+        }
+
+        function setScanDirection(dir) {
+            currentDirection = dir;
+            let btnIn = document.getElementById('btnModeIn');
+            let btnOut = document.getElementById('dirBtnOut');
+            if (dir === 'in') { btnIn.className = "dir-btn active-in"; btnOut.className = "dir-btn"; }
+            else { btnIn.className = "dir-btn"; btnOut.className = "dir-btn active-out"; }
+        }
+
+        function setScanMode(mode) {
+            let btnFast = document.getElementById('btnFastScan');
+            let btnAdv = document.getElementById('btnAdvScan');
+            let fastBox = document.getElementById('fast-scan-container');
+            let advBox = document.getElementById('adv-scan-container');
+
+            stopAdvancedScanner();
+
+            if (mode === 'fast') {
+                btnFast.className = "scan-mode-btn active";
+                btnAdv.className = "scan-mode-btn";
+                fastBox.style.display = "block";
+                advBox.style.display = "none";
+                startContinuousCamera();
+            } else {
+                if (globalCamStream) {
+                    globalCamStream.getTracks().forEach(t => t.stop());
+                    globalCamStream = null;
+                }
+                btnFast.className = "scan-mode-btn";
+                btnAdv.className = "scan-mode-btn active";
+                fastBox.style.display = "none";
+                advBox.style.display = "block";
+                startAdvancedStep(1);
+            }
+        }
+
+        function updateUI() {
+            localStorage.setItem('passextreme_tickets', JSON.stringify(tickets));
+            document.getElementById('stat-total').innerText = tickets.length;
+            document.getElementById('stat-scanned').innerText = tickets.filter(t => t.uses > 0).length;
+            document.getElementById('db-count').innerText = `${tickets.length} kodów`;
+
+            let searchQuery = document.getElementById('search-input') ? document.getElementById('search-input').value.toLowerCase() : "";
+            let container = document.getElementById('ticketListContainer');
+            if(!container) return;
+
+            let filtered = tickets.filter(t => t.code.toLowerCase().includes(searchQuery));
+            if(filtered.length === 0) {
+                container.innerHTML = '<div style="color: #f7a8d8; font-size: 0.75rem; text-align: center; padding: 10px;">Brak biletów.</div>';
+                return;
+            }
+
+            container.innerHTML = '';
+            filtered.slice().reverse().forEach((t, idx) => {
+                let realIdx = tickets.indexOf(t);
+                let div = document.createElement('div');
+                div.className = 'ticket-item';
+                div.innerHTML = `
+                    <div class="ticket-info">
+                        <span class="ticket-code">${t.code}</span>
+                        <span class="ticket-meta">Użycia: ${t.uses} / ${t.maxUses === 999999 ? '∞' : t.maxUses}</span>
+                    </div>
+                    <div class="ticket-actions">
+                        <button class="icon-btn" onclick="verifyTicket('${t.code}', false)">✔️</button>
+                        <button class="icon-btn" onclick="tickets[${realIdx}].uses=0;updateUI();" style="background:#059669;">🔄</button>
+                        <button class="icon-btn" onclick="tickets.splice(${realIdx},1);updateUI();" style="background:#ef4444;">🗑️</button>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        // --- OBSŁUGA PASKU POSTĘPU 2 SEKUND (NFC Fake z działającą w tle kamerą) ---
+        function startHoldNFC(mode) {
+            let bar = document.getElementById(mode === 'fast' ? 'fast-hold-bar' : 'adv-hold-bar');
+            if(!bar) return;
+            bar.style.transition = `width ${holdDuration}ms linear`;
+            bar.style.width = '100%';
+
+            holdTimer = setTimeout(() => {
+                bar.style.width = '0%';
+                if (mode === 'fast') {
+                    let sampleCode = "QUICK-NFC-" + Math.floor(1000 + Math.random() * 9000);
+                    if (!tickets.some(t => t.code === sampleCode)) {
+                        tickets.push({ code: sampleCode, uses: 0, maxUses: settings.maxUses });
+                    }
+                    verifyTicket(sampleCode, true);
+                } else {
+                    // Zaawansowany końcowy NFC (20% szans na błąd, żeby testować wytrzymałość i powtarzać)
+                    let isNfcOk = Math.random() > 0.2;
+                    let sampleCode = "ADV-NFC-" + Math.floor(1000 + Math.random() * 9000);
+                    if (isNfcOk) {
+                        if (!tickets.some(t => t.code === sampleCode)) {
+                            tickets.push({ code: sampleCode, uses: 0, maxUses: settings.maxUses });
+                        }
+                        verifyTicket(sampleCode, false);
+                    } else {
+                        showErrorModal(sampleCode, "BŁĄD SYGNAŁU NFC", "Sygnał przerwany! Przytrzymaj kartę w górnej części telefonu jeszcze raz, aż linia dojędzie do końca.");
+                    }
+                }
+            }, holdDuration);
+        }
+
+        function endHoldNFC() {
+            if (holdTimer) {
+                clearTimeout(holdTimer);
+                holdTimer = null;
+                let barFast = document.getElementById('fast-hold-bar');
+                let barAdv = document.getElementById('adv-hold-bar');
+                if(barFast) { barFast.style.transition = 'width 0.2s'; barFast.style.width = '0%'; }
+                if(barAdv) { barAdv.style.transition = 'width 0.2s'; barAdv.style.width = '0%'; }
+            }
+        }
+
+        // --- ZAAWANSOWANY SKAN (Real AI: przód, tył + NFC fake na końcu) ---
+        async function startAdvancedStep(step) {
+            advStep = step;
+            let titleEl = document.getElementById('adv-step-title');
+            let descEl = document.getElementById('adv-step-desc');
+            let btnEl = document.getElementById('adv-action-btn');
+            let viewBox = document.getElementById('adv-view-box');
+            let btnBox = document.getElementById('adv-buttons-box');
+
+            if (step === 1) {
+                titleEl.innerText = "Krok 1: Skanowanie PRZODU biletu/karty";
+                descEl.innerText = "Użyj tylnego aparatu – AI analizuje imię, nazwisko i rezerwację.";
+                btnEl.innerText = "📸 Skanuj i Potwierdź Przód";
+                btnBox.style.display = "flex";
+                viewBox.innerHTML = '<video id="adv-video" autoplay playsinline muted style="width: 100%; height: 100%; object-fit: cover;"></video>';
+                try {
+                    if (advStream) advStream.getTracks().forEach(t => t.stop());
+                    advStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+                    document.getElementById('adv-video').srcObject = advStream;
+                } catch(e) { alert("Błąd tylnej kamery."); }
+            } else if (step === 2) {
+                titleEl.innerText = "Krok 2: Skanowanie TYŁU biletu/karty";
+                descEl.innerText = "Obróć dokument (tylny aparat) – AI analizuje datę ważności i kody.";
+                btnEl.innerText = "📸 Skanuj i Potwierdź Tył";
+                btnBox.style.display = "flex";
+                viewBox.innerHTML = '<video id="adv-video" autoplay playsinline muted style="width: 100%; height: 100%; object-fit: cover;"></video>';
+                try {
+                    if (advStream) advStream.getTracks().forEach(t => t.stop());
+                    advStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+                    document.getElementById('adv-video').srcObject = advStream;
+                } catch(e) { alert("Błąd tylnej kamery."); }
+            } else if (step === 3) {
+                // Krok 3: Końcowy NFC (ciągła kamera w tle + nakładka NFC z paskiem 2s)
+                if (advStream) { advStream.getTracks().forEach(t => t.stop()); advStream = null; }
+                
+                titleEl.innerText = "Krok 3: Końcowy odczyt NFC dokumentu";
+                descEl.innerText = "Przyłóż kartę do górnej części telefonu i przytrzymaj.";
+                btnBox.style.display = "none";
+                
+                try {
+                    let tempStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+                    viewBox.innerHTML = `
+                        <div class="cam-nfc-box" 
+                             onmousedown="startHoldNFC('adv')" 
+                             onmouseup="endHoldNFC()" 
+                             ontouchstart="startHoldNFC('adv')" 
+                             ontouchend="endHoldNFC()">
+                            <video id="adv-nfc-video" autoplay playsinline muted style="position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover; z-index:1;"></video>
+                            <div class="nfc-overlay-ui" style="z-index:2;">
+                                <div class="nfc-wave">📶</div>
+                                <div style="font-size: 0.75rem; color: #f7a8d8; font-weight: bold; text-align: center;">
+                                    SPRAWDZANIE SYGNAŁU NFC... (PRZYTRZYMAJ 2s)
+                                </div>
+                            </div>
+                            <div class="hold-progress-container" style="z-index:3;">
+                                <div class="hold-progress-fill" id="adv-hold-bar"></div>
+                            </div>
+                        </div>
+                    `;
+                    document.getElementById('adv-nfc-video').srcObject = tempStream;
+                    advStream = tempStream;
+                } catch(e) {}
+            }
+        }
+
+        function handleAdvStep() {
+            if (advStep === 1) {
+                startAdvancedStep(2);
+            } else if (advStep === 2) {
+                startAdvancedStep(3);
+            }
+        }
+
+        function stopAdvancedScanner() {
+            if (advStream) {
+                advStream.getTracks().forEach(t => t.stop());
+                advStream = null;
+            }
+        }
+
+        function verifyTicket(code, isFastMode) {
+            code = code.trim();
+            if (!code) return;
+
+            let ticket = tickets.find(t => t.code === code);
+            
+            if (isFastMode) {
+                showSuccessModal(code, "SZYBKI SKAN NFC: Autoryzacja pomyślna.");
+                return;
+            }
+
+            if (!ticket) {
+                showErrorModal(code, "DOKUMENT NIEZNANY", "AI nie wykryło prawidłowych danych w dokumencie!");
+                return;
+            }
+
+            let maxLimit = ticket.maxUses !== undefined ? ticket.maxUses : settings.maxUses;
+            if (ticket.uses >= maxLimit) {
+                showErrorModal(code, "DOKUMENT WYKORZYSTANY", `Ten dokument zużyto już ${ticket.uses} razy!`);
+                return;
+            }
+
+            ticket.uses += 1;
+            updateUI();
+            showSuccessModal(code, `AI + NFC OK: Zweryfikowano pomyślnie (${ticket.uses}/${maxLimit === 999999 ? '∞' : maxLimit})`);
+        }
+
+        function showSuccessModal(code, desc) {
+            if(settings.sound === "on") playBeep(900, 150);
+            document.getElementById('success-code-display').innerText = code;
+            document.getElementById('success-desc-text').innerText = desc;
+            document.getElementById('modal-success').style.display = 'flex';
+            document.getElementById('modal-error').style.display = 'none';
+            clearTimeout(modalTimeout);
+            modalTimeout = setTimeout(() => { closeModal(); }, 5000);
+        }
+
+        function showErrorModal(code, title, desc) {
+            if(settings.sound === "on") { playBeep(250, 200); setTimeout(() => playBeep(180, 300), 220); }
+            document.getElementById('error-title-text').innerText = title;
+            document.getElementById('error-code-display').innerText = code;
+            document.getElementById('error-desc-text').innerText = desc;
+            document.getElementById('modal-error').style.display = 'flex';
+            document.getElementById('modal-success').style.display = 'none';
+            clearTimeout(modalTimeout);
+            modalTimeout = setTimeout(() => { closeModal(); }, 5000);
+        }
+
+        function closeModal() {
+            clearTimeout(modalTimeout);
+            document.getElementById('modal-success').style.display = 'none';
+            document.getElementById('modal-error').style.display = 'none';
+            document.getElementById('manual-input-code').value = '';
+        }
+
+        function generateBatchCodes() {
+            let count = parseInt(document.getElementById('gen-count').value) || 10;
+            let len = parseInt(document.getElementById('gen-length').value) || 8;
+            for(let i=0; i<count; i++) {
+                let code = "CARD-" + Math.random().toString(36).substring(2, 2 + len).toUpperCase();
+                if(!tickets.some(t => t.code === code)) {
+                    tickets.push({ code: code, uses: 0, maxUses: settings.maxUses });
+                }
+            }
+            updateUI();
+            alert("Wygenerowano pomyślnie!");
+            switchTab('database');
+        }
+
+        function clearAllTickets() { if(confirm("Wyczyścić bazę?")) { tickets = []; updateUI(); } }
+
+        function playBeep(freq, duration) {
+            try {
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+                osc.connect(gain); gain.connect(audioCtx.destination);
+                osc.start(); osc.stop(audioCtx.currentTime + (duration / 1000));
+            } catch(e) {}
+        }
+    </script>
+</body>
+</html>
