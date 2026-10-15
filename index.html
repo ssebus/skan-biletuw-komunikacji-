@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>German Ticket Inspector</title>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <style>
+        :root {
+            --bg: #090d16;
+            --panel: #161e2e;
+            --border: #334155;
+            --accent: #2563eb;
+            --success: #16a34a;
+            --danger: #dc2626;
+            --warning: #ca8a04;
+            --text: #f8fafc;
+            --muted: #94a3b8;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 16px;
+        }
+
+        h1 { font-size: 1.2rem; margin-bottom: 4px; text-align: center; }
+        p.sub { font-size: 0.75rem; color: var(--muted); margin-bottom: 16px; text-align: center; }
+
+        .container {
+            width: 100%;
+            max-width: 420px;
+            background: var(--panel);
+            border-radius: 16px;
+            padding: 16px;
+            border: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        /* Wizjer kamery */
+        .camera-box {
+            position: relative;
+            width: 100%;
+            height: 240px;
+            background: #000;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 2px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        video, canvas {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            position: absolute;
+        }
+
+        .viewfinder-frame {
+            position: absolute;
+            width: 75%;
+            height: 120px;
+            border: 2px dashed var(--accent);
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(37, 99, 235, 0.3);
+            pointer-events: none;
+        }
+
+        /* Status (Ważny / Nieważny) */
+        .status-badge {
+            padding: 12px;
+            border-radius: 10px;
+            font-weight: 700;
+            text-align: center;
+            font-size: 1rem;
+            display: none;
+        }
+        .status-badge.valid { background: var(--success); color: white; }
+        .status-badge.invalid { background: var(--danger); color: white; }
+        .status-badge.unknown { background: var(--warning); color: #000; }
+
+        /* Tabela wyników – pokazuje tylko to, co faktycznie wykryto */
+        .result-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+            background: rgba(15, 23, 42, 0.5);
+            border-radius: 8px;
+            overflow: hidden;
+            display: none;
+        }
+        .result-table th, .result-table td {
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--border);
+            text-align: left;
+        }
+        .result-table th { color: var(--muted); width: 40%; font-weight: 500; }
+        .result-table td { color: #fff; font-weight: 600; }
+        .result-table tr:last-child td { border-bottom: none; }
+
+        /* Przyciski i testy */
+        .btn-group {
+            display: flex;
+            gap: 8px;
+        }
+        button {
+            flex: 1;
+            background: var(--accent);
+            color: white;
+            border: none;
+            padding: 12px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            cursor: pointer;
+        }
+        button.secondary { background: #475569; }
+        button.danger { background: var(--danger); }
+
+        .manual-box {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        textarea {
+            width: 100%;
+            background: #0b0f16;
+            border: 1px solid var(--border);
+            color: #fff;
+            padding: 8px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            resize: vertical;
+            height: 60px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>German Ticket Inspector</h1>
+    <p class="sub">Odczytuje faktyczne dane z kodów biletów i kart w Niemczech</p>
+
+    <div class="container">
+        <!-- Wizjer -->
+        <div class="camera-box">
+            <video id="videoElem" autoplay playsinline muted></video>
+            <canvas id="canvasElem" style="display:none;"></canvas>
+            <div class="viewfinder-frame"></div>
+            <div id="camHint" style="position:absolute; color:var(--muted); font-size:0.8rem; z-index:5; text-align:center; padding:0 20px;">
+                Kliknij start, aby skanować kod z biletu lub karty
+            </div>
+        </div>
+
+        <!-- Status -->
+        <div id="statusBadge" class="status-badge">Oczekiwanie na skan...</div>
+
+        <!-- Tabela -->
+        <table id="resultTable" class="result-table">
+            <tbody id="tableBody">
+                <!-- Dynamicznie wstawiane tylko istniejące pola -->
+            </tbody>
+        </table>
+
+        <!-- Przyciski sterujące -->
+        <div class="btn-group">
+            <button id="btnScan" onclick="toggleCam()">Start Skanera</button>
+            <button class="secondary" onclick="testSample('d-ticket')">Test D-Ticket</button>
+        </div>
+        <div class="btn-group">
+            <button class="secondary" onclick="testSample('automat')">Test z Automatu</button>
+            <button class="secondary" onclick="testSample('expired')">Test Przeterminowany</button>
+        </div>
+
+        <!-- Ręczne wklejenie kodu/tekstu -->
+        <div class="manual-box">
+            <textarea id="manualText" placeholder="Lub wklej tutaj odczytany tekst / zawartość kodu..."></textarea>
+            <button class="secondary" onclick="processManual()" style="padding: 8px;">Sprawdź wklejony tekst</button>
+        </div>
+    </div>
+
+    <script>
+        let video = document.getElementById('videoElem');
+        let canvas = document.getElementById('canvasElem');
+        let ctx = canvas.getContext('2d');
+        let scanning = false;
+        let animFrame = null;
+
+        // Dzisiejsza data systemowa: 15 października 2026
+        const TODAY = new Date(2026, 9, 15);
+
+        // Dźwięki powiadomień
+        function beep(type) {
+            try {
+                let ac = new (window.AudioContext || window.webkitAudioContext)();
+                let osc = ac.createOscillator();
+                let g = ac.createGain();
+                osc.connect(g); g.connect(ac.destination);
+                if(type === 'valid') {
+                    osc.frequency.setValueAtTime(600, ac.currentTime);
+                    osc.frequency.setValueAtTime(850, ac.currentTime + 0.1);
+                    g.gain.setValueAtTime(0.1, ac.currentTime);
+                    osc.start(); osc.stop(ac.currentTime + 0.3);
+                } else {
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(150, ac.currentTime);
+                    g.gain.setValueAtTime(0.15, ac.currentTime);
+                    osc.start(); osc.stop(ac.currentTime + 0.3);
+                }
+            } catch(e) {}
+        }
+
+        async function toggleCam() {
+            if (scanning) {
+                stopCam();
+            } else {
+                try {
+                    let stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+                    video.srcObject = stream;
+                    video.play();
+                    document.getElementById('camHint').style.display = 'none';
+                    document.getElementById('btnScan').innerText = 'Zatrzymaj';
+                    document.getElementById('btnScan').className = 'danger';
+                    scanning = true;
+                    requestAnimationFrame(tick);
+                } catch(e) {
+                    alert("Brak dostępu do aparatu.");
+                }
+            }
+        }
+
+        function stopCam() {
+            if (video.srcObject) {
+                video.srcObject.getTracks().forEach(t => t.stop());
+                video.srcObject = null;
+            }
+            if (animFrame) cancelAnimationFrame(animFrame);
+            scanning = false;
+            document.getElementById('camHint').style.display = 'block';
+            document.getElementById('btnScan').innerText = 'Start Skanera';
+            document.getElementById('btnScan').className = '';
+        }
+
+        function tick() {
+            if (!scanning) return;
+            if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                let img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                let qr = jsQR(img.data, img.width, img.height);
+                if (qr) {
+                    parseData(qr.data);
+                    setTimeout(() => { if(scanning) requestAnimationFrame(tick); }, 2500);
+                    return;
+                }
+            }
+            animFrame = requestAnimationFrame(tick);
+        }
+
+        function testSample(type) {
+            if (type === 'd-ticket') {
+                parseData("D-TICKET; Subskrypcja: DE-883920114; Nazwisko: Jan Kowalski; Gültig: 01.10.2026 - 31.10.2026; DB Regio");
+            } else if (type === 'automat') {
+                parseData("FAHRKARTE AUTOMAT; Relacja: Remagen -> Bonn; Preis: 9.80 EUR; Datum: 15.10.2026 18:30; ID: 994281");
+            } else if (type === 'expired') {
+                parseData("FAHRKARTE; Relacja: Köln -> Düsseldorf; Datum: 10.05.2025; Ablauf: Abgelaufen");
+            }
+        }
+
+        function processManual() {
+            let val = document.getElementById('manualText').value;
+            if (val) parseData(val);
+        }
+
+        // GŁÓWNY PARSER: Wykrywa tylko to, co faktycznie jest w tekście/kodzie
+        function parseData(text) {
+            let dataFields = {};
+
+            // 1. Sprawdzenie przewoźnika / typu
+            if (text.includes("D-TICKET") || text.includes("Subskrypcja")) {
+                dataFields["Typ biletu"] = "Deutschlandticket (Karta / Aplikacja)";
+            } else if (text.includes("AUTOMAT") || text.includes("FAHRKARTE")) {
+                dataFields["Typ biletu"] = "Bilet papierowy z automatu";
+            } else {
+                dataFields["Typ biletu"] = "Bilet / Kod uniwersalny";
+            }
+
+            // 2. Szukanie relacji (skąd -> dokąd)
+            let routeMatch = text.match(/(?:Relacja|Route)[:\s]+([A-Za-zÄÖÜäöüß\-\> ]+)/i);
+            if (routeMatch) {
+                dataFields["Trasa"] = routeMatch[1].trim();
+            }
+
+            // 3. Szukanie numeru subskrypcji lub ID
+            let subMatch = text.match(/(?:Subskrypcja|ID|Nr)[:\s]+([A-Za-z0-9\-]+)/i);
+            if (subMatch) {
+                dataFields["Numer / ID"] = subMatch[1].trim();
+            }
+
+            // 4. Szukanie nazwiska (tylko jeśli jest w kodzie!)
+            let nameMatch = text.match(/(?:Nazwisko|Name)[:\s]+([A-Za-zĄĆĘŁŃÓŚŹŻąćęłńóśźż\s]+)(?:;|$)/i);
+            if (nameMatch) {
+                dataFields["Pasażer"] = nameMatch[1].trim();
+            }
+
+            // 5. Szukanie daty i weryfikacja ważności
+            let dateRegex = /(\d{2})\.(\d{2})\.(\d{4})/g;
+            let dates = [...text.matchAll(dateRegex)];
+            
+            let validityStatus = "unknown";
+            let validityText = "Brak daty w odczycie";
+
+            if (dates.length > 0) {
+                // Weź ostatnią datę lub datę końca ważności
+                let dMatch = dates[dates.length - 1];
+                let day = parseInt(dMatch[1]);
+                let month = parseInt(dMatch[2]) - 1;
+                let year = parseInt(dMatch[3]);
+                let ticketDate = new Date(year, month, day, 23, 59, 59);
+
+                validityText = `${dMatch[1]}.${dMatch[2]}.${dMatch[3]}`;
+
+                if (ticketDate >= TODAY) {
+                    validityStatus = "valid";
+                    validityText += " ✅ (WAŻNY)";
+                } else {
+                    validityStatus = "invalid";
+                    validityText += " ❌ (NIEWAŻNY / PRZETERMINOWANY)";
+                }
+            } else if (text.includes("Gültig") || text.includes("Abgelaufen")) {
+                if (text.includes("Abgelaufen")) {
+                    validityStatus = "invalid";
+                    validityText = "Przeterminowany (oznaczony w kodzie)";
+                } else {
+                    validityStatus = "valid";
+                    validityText = "Ważny (miesięczny D-Ticket)";
+                }
+            }
+
+            dataFields["Ważność"] = validityText;
+
+            renderTable(validityStatus, dataFields);
+        }
+
+        function renderTable(status, fields) {
+            let badge = document.getElementById('statusBadge');
+            badge.style.display = 'block';
+            badge.className = 'status-badge ' + status;
+
+            if (status === 'valid') {
+                badge.innerText = '✅ GIT – BILET WAŻNY';
+                beep('valid');
+            } else if (status === 'invalid') {
+                badge.innerText = '❌ NIEWAŻNY – ODRZUCONY';
+                beep('invalid');
+            } else {
+                badge.innerText = '⚠️ SPRAWDŹ – BRAK PEŁNEJ DATY';
+                beep('invalid');
+            }
+
+            let tbody = document.getElementById('tableBody');
+            tbody.innerHTML = '';
+
+            for (let [key, value] of Object.entries(fields)) {
+                let row = `<tr><th>${key}</th><td>${value}</td></tr>`;
+                tbody.innerHTML += row;
+            }
+
+            document.getElementById('resultTable').style.display = 'table';
+        }
+    </script>
+</body>
+</html>
