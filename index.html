@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TicketScan Pro - Weryfikator Biletów</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        .scanner-card { background: #1e293b; border-radius: 16px; padding: 24px; width: 100%; max-width: 400px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); text-align: center; }
+        .viewfinder { width: 100%; height: 200px; border: 2px dashed #64748b; border-radius: 12px; display: flex; align-items: center; justify-content: center; margin-bottom: 20px; position: relative; overflow: hidden; background: #0f172a; }
+        .status-badge { padding: 12px 20px; border-radius: 8px; font-weight: bold; font-size: 1.1rem; margin-bottom: 20px; display: none; }
+        .valid { background: #22c55e; color: #fff; animation: pulse-green 1.5s infinite; }
+        .invalid { background: #ef4444; color: #fff; animation: shake 0.5s; }
+        .unknown { background: #eab308; color: #000; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; text-align: left; font-size: 0.9rem; }
+        th, td { padding: 8px; border-bottom: 1px solid #334155; }
+        button { background: #3b82f6; color: white; border: none; padding: 12px 24px; border-radius: 8px; font-size: 1rem; cursor: pointer; width: 100%; font-weight: bold; }
+        button:hover { background: #2563eb; }
+        @keyframes pulse-green { 0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4); } 70% { box-shadow: 0 0 0 15px rgba(34, 197, 94, 0); } 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); } }
+        @keyframes shake { 0%, 100% { transform: translateX(0); } 20%, 60% { transform: translateX(-5px); } 40%, 80% { transform: translateX(5px); } }
+    </style>
+</head>
+<body>
+
+    <div class="scanner-card">
+        <h2>TicketScan Pro</h2>
+        <div class="viewfinder" id="viewfinder">
+            <span style="color: #94a3b8;">📷 Nakieruj aparat na bilet lub kod</span>
+        </div>
+
+        <div id="statusBadge" class="status-badge">Oczekiwanie na skan...</div>
+
+        <button onclick="simulateScan()">Symuluj Skanowanie Biletu DB</button>
+
+        <div id="resultTableContainer" style="display:none;">
+            <table>
+                <tr><th>Przewoźnik</th><td id="resCarrier">-</td></tr>
+                <tr><th>Typ</th><td id="resType">-</td></tr>
+                <tr><th>Pasażer</th><td id="resName">-</td></tr>
+                <tr><th>Ważność</th><td id="resDate">-</td></tr>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        function playSound(type) {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+
+            if (type === 'valid') {
+                osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
+                osc.frequency.setValueAtTime(880, ctx.currentTime + 0.1); // A5
+                gain.gain.setValueAtTime(0.1, ctx.currentTime);
+                osc.start();
+                osc.stop(ctx.currentTime + 0.3);
+            } else if (type === 'invalid') {
+                osc.frequency.setValueAtTime(200, ctx.currentTime);
+                osc.frequency.setValueAtTime(150, ctx.currentTime + 0.15);
+                gain.gain.setValueAtTime(0.15, ctx.currentTime);
+                osc.start();
+                osc.stop(ctx.currentTime + 0.35);
+            }
+        }
+
+        function simulateScan() {
+            // Symulacja losowego wyniku weryfikacji
+            const outcomes = [
+                { status: 'valid', label: '✅ GIT / WAŻNY', carrier: 'Deutsche Bahn', type: 'Bilet Regionalny', name: 'Jan Kowalski', date: '15.10.2026 (Ważny)' },
+                { status: 'invalid', label: '❌ NIEWAŻNY', carrier: 'Deutsche Bahn', type: 'Bilet Jednorazowy', name: 'Nieznany', date: '12.10.2026 (Przeterminowany)' },
+                { status: 'unknown', label: '⚠️ NIE WIEM / SPRAWDŹ', carrier: 'Nieznany Automat', type: 'Bilet Papierowy', name: 'Brak danych', date: 'Weryfikacja ręczna' }
+            ];
+            
+            const randomOutcome = outcomes[Math.floor(Math.random() * outcomes.length)];
+            
+            const badge = document.getElementById('statusBadge');
+            badge.style.display = 'block';
+            badge.className = 'status-badge ' + randomOutcome.status;
+            badge.innerText = randomOutcome.label;
+
+            document.getElementById('resCarrier').innerText = randomOutcome.carrier;
+            document.getElementById('resType').innerText = randomOutcome.type;
+            document.getElementById('resName').innerText = randomOutcome.name;
+            document.getElementById('resDate').innerText = randomOutcome.date;
+            document.getElementById('resultTableContainer').style.display = 'block';
+
+            if (randomOutcome.status === 'valid') playSound('valid');
+            if (randomOutcome.status === 'invalid') playSound('invalid');
+        }
+    </script>
+</body>
+</html>
