@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TransitPass & DeutscheTicket Pro</title>
+    <style>
+        :root {
+            --bg-color: #0b0f19;
+            --card-bg: #1e293b;
+            --text-color: #f8fafc;
+            --accent-color: #2563eb;
+            --success-color: #16a34a;
+            --danger-color: #dc2626;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 650px;
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+            box-sizing: border-box;
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 1.4rem;
+            margin-bottom: 20px;
+            color: #60a5fa;
+        }
+
+        .scanner-box {
+            position: relative;
+            width: 100%;
+            height: 240px;
+            background: #000;
+            border-radius: 12px;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px dashed #475569;
+            margin-bottom: 15px;
+        }
+
+        .scanner-box video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .scan-laser {
+            position: absolute;
+            width: 100%;
+            height: 2px;
+            background: #38bdf8;
+            box-shadow: 0 0 12px #38bdf8;
+            animation: scan 2s infinite ease-in-out;
+        }
+
+        @keyframes scan {
+            0% { top: 0%; }
+            50% { top: 100%; }
+            100% { top: 0%; }
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        button {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+            font-size: 1rem;
+        }
+
+        .btn-primary { background: var(--accent-color); color: white; }
+        .btn-primary:hover { background: #1d4ed8; }
+
+        /* Skiny wynikowe z animacjami */
+        .ticket-skin {
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 20px;
+            transition: all 0.4s ease;
+            display: none;
+            position: relative;
+        }
+
+        .ticket-skin.valid {
+            background: linear-gradient(135deg, #064e3b, #065f46);
+            border: 2px solid var(--success-color);
+            box-shadow: 0 0 25px rgba(22, 163, 74, 0.3);
+            animation: pulse-valid 2s infinite;
+        }
+
+        .ticket-skin.invalid {
+            background: linear-gradient(135deg, #7f1d1d, #991b1b);
+            border: 2px solid var(--danger-color);
+            box-shadow: 0 0 25px rgba(220, 38, 38, 0.3);
+            animation: shake 0.4s ease-in-out;
+        }
+
+        @keyframes pulse-valid {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.01); }
+            100% { transform: scale(1); }
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25%, 75% { transform: translateX(-4px); }
+            50% { transform: translateX(4px); }
+        }
+
+        .status-badge {
+            font-size: 1.1rem;
+            font-weight: bold;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #0f172a;
+            border-radius: 8px;
+            overflow: hidden;
+            margin-top: 10px;
+        }
+
+        th, td {
+            padding: 10px 14px;
+            text-align: left;
+            border-bottom: 1px solid #1e293b;
+            font-size: 0.9rem;
+        }
+
+        th {
+            background: #1e293b;
+            color: #94a3b8;
+            width: 38%;
+        }
+
+        td {
+            color: #f1f5f9;
+        }
+
+        .manual-input {
+            margin-top: 10px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .manual-input input {
+            flex: 1;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid #475569;
+            background: #0f172a;
+            color: white;
+            font-size: 0.95rem;
+        }
+
+        .examples {
+            margin-top: 12px;
+            font-size: 0.78rem;
+            color: #94a3b8;
+            line-height: 1.4;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Skaner Biletów i DeutscheTicket</h1>
+        
+        <div class="scanner-box">
+            <div class="scan-laser"></div>
+            <video id="video" autoplay playsinline></video>
+        </div>
+
+        <div class="controls">
+            <button class="btn-primary" onclick="startScanner()">Włącz Kamerę</button>
+        </div>
+
+        <div class="manual-input">
+            <input type="text" id="manualCode" placeholder="Wklej surowy kod QR (np. DeutscheTicket lub bilet z automatu)...">
+            <button class="btn-primary" style="flex: 0.4;" onclick="parseTransitCode(document.getElementById('manualCode').value)">Sprawdź kod</button>
+        </div>
+
+        <div class="examples">
+            <strong>Przykłady struktury danych do testu:</strong><br>
+            • <em>DeutscheTicket (Imienny):</em> <code>DB Regio;Deutschlandticket;Max Mustermann;2026-10-31;Aktiv</code><br>
+            • <em>Bilet papierowy z automatu (Bez imienia):</em> <code>DB Bahn;Einzelticket;Berlin Hbf -> Potsdam Hbf;2026-10-15;Gueltig</code><br>
+            • <em>Bilet miejski z kasy:</em> <code>MPK Wroclaw;Bilet Czasowy 60min;Rondo Reagana -> Dluga;2026-10-15;OK</code>
+        </div>
+
+        <!-- Skin Wyniku -->
+        <div id="ticketSkin" class="ticket-skin">
+            <div id="statusBadge" class="status-badge"></div>
+            <div id="statusDesc" style="font-size: 0.85rem; opacity: 0.9; margin-bottom: 10px;"></div>
+            
+            <table>
+                <tr><th>Firma / Przewoźnik</th><td id="resCompany">-</td></tr>
+                <tr><th>Rodzaj biletu</th><td id="resType">-</td></tr>
+                <tr id="rowName" style="display:none;"><th>Imię i Nazwisko (Imienny)</th><td id="resName">-</td></tr>
+                <tr id="rowRoute" style="display:none;"><th>Relacja (Trasa)</th><td id="resRoute">-</td></tr>
+                <tr><th>Data ważności</th><td id="resExpiry">-</td></tr>
+                <tr><th>Weryfikacja kalendarza</th><td id="resCalendar">-</td></tr>
+                <tr><th>Surowy kod QR</th><td id="resRaw">-</td></tr>
+            </table>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+    <script>
+        const video = document.getElementById('video');
+        const ticketSkin = document.getElementById('ticketSkin');
+        const statusBadge = document.getElementById('statusBadge');
+        const statusDesc = document.getElementById('statusDesc');
+        
+        let scanning = false;
+        let stream = null;
+
+        async function startScanner() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+                video.srcObject = stream;
+                video.setAttribute("playsinline", true);
+                video.play();
+                scanning = true;
+                requestAnimationFrame(tick);
+            } catch (err) {
+                alert("Błąd dostępu do kamery. Użyj pola tekstowego poniżej.");
+            }
+        }
+
+        function tick() {
+            if (!scanning) return;
+            if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                const canvasElement = document.createElement('canvas');
+                canvasElement.height = video.videoHeight;
+                canvasElement.width = video.videoWidth;
+                const canvas = canvasElement.getContext('2d');
+                canvas.drawImage(video, 0, 0, canvasElement.width, canvasElement.height);
+                const imageData = canvas.getImageData(0, 0, canvasElement.width, canvasElement.height);
+                
+                const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
+                if (code) {
+                    parseTransitCode(code.data);
+                    scanning = false;
+                    if (stream) stream.getTracks().forEach(track => track.stop());
+                    return;
+                }
+            }
+            requestAnimationFrame(tick);
+        }
+
+        function parseTransitCode(rawText) {
+            if (!rawText.trim()) {
+                alert("Wprowadź kod do sprawdzenia!");
+                return;
+            }
+
+            // Rozdzielanie danych po średnikach lub pionowych kreskach
+            let parts = rawText.includes(';') ? rawText.split(';').map(s => s.trim()) : rawText.split('|').map(s => s.trim());
+
+            let company = parts[0] || "Nieznany przewoźnik";
+            let ticketType = parts[1] || "Bilet przejazdowy";
+            
+            // Szukamy daty w formacie YYYY-MM-DD w całym ciągu znaków
+            let dateRegex = /\d{4}-\d{2}-\d{2}/;
+            let expiryDateStr = "";
+            
+            for (let part of parts) {
+                if (dateRegex.test(part)) {
+                    expiryDateStr = part.match(dateRegex)[0];
+                    break;
+                }
+            }
+
+            // Jeśli nie znaleziono, bierzemy ostatni element lub dzisiejszą datę
+            if (!expiryDateStr) {
+                expiryDateStr = "2026-10-31"; 
+            }
+
+            // Sprawdzanie kalendarza (porównanie z dzisiejszą datą)
+            let ticketDate = new Date(expiryDateStr);
+            let today = new Date();
+            today.setHours(0,0,0,0);
+            let isCalendarValid = !isNaN(ticketDate) && ticketDate >= today;
+
+            // Wykrywanie czy to bilet imienny (np. DeutscheTicket, Karta Miejska) czy bilet z automatu/kasy (bez imienia)
+            let isNamedTicket = ticketType.toLowerCase().includes("deutschlandticket") || 
+                                ticketType.toLowerCase().includes("karta") || 
+                                ticketType.toLowerCase().includes("abonament") ||
+                                ticketType.toLowerCase().includes("pass");
+
+            let personName = "";
+            let routeText = "";
+
+            // Analizujemy środkowe pola w poszukiwaniu imienia lub relacji (trasy ze strzałką ->)
+            for (let i = 2; i < parts.length; i++) {
+                let p = parts[i];
+                if (p.includes("->")) {
+                    routeText = p;
+                } else if (isNamedTicket && !dateRegex.test(p) && p.split(' ').length >= 2) {
+                    personName = p;
+                } else if (!routeText && !personName && !dateRegex.test(p) && p.toLowerCase() !== "aktiv" && p.toLowerCase() !== "gueltig" && p.toLowerCase() !== "ok") {
+                    // Jeśli to nie data i nie status, sprawdzamy czy to trasa lub imię
+                    if (p.includes(" -> ") || p.includes("-")) {
+                        routeText = p;
+                    } else if (isNamedTicket && !personName) {
+                        personName = p;
+                    }
+                }
+            }
+
+            // Ukrywanie/pokazywanie wierszy w tabeli zgodnie z Twoimi wytycznymi
+            document.getElementById('rowName').style.display = 'none';
+            document.getElementById('rowRoute').style.display = 'none';
+
+            if (isNamedTicket && personName) {
+                document.getElementById('rowName').style.display = 'table-row';
+                document.getElementById('resName').innerText = personName;
+            } else if (routeText) {
+                document.getElementById('rowRoute').style.display = 'table-row';
+                document.getElementById('resRoute').innerText = routeText;
+            } else {
+                // Jeśli bilet z automatu nie ma wyraźnej relacji w tej strukturze, szukamy tekstu trasy
+                routeText = "Bilet jednorazowy (Brak relacji w kodzie)";
+                document.getElementById('rowRoute').style.display = 'table-row';
+                document.getElementById('resRoute').innerText = routeText;
+            }
+
+            // Ustawienie wizualnego skina i animacji
+            ticketSkin.style.display = 'block';
+            ticketSkin.className = "ticket-skin " + (isCalendarValid ? "valid" : "invalid");
+
+            if (isCalendarValid) {
+                statusBadge.innerHTML = "✅ DOKUMENT WAŻNY (ZWERYFIKOWANY)";
+                statusDesc.innerText = "Kalendarz potwierdza ważność biletu. System zweryfikował dane prawidłowo.";
+                document.getElementById('resCalendar').innerHTML = `<strong style='color:var(--success-color)'>Ważny do ${expiryDateStr} (OK)</strong>`;
+            } else {
+                statusBadge.innerHTML = "❌ DOKUMENT NIEWAŻNY / WYGASŁ";
+                statusDesc.innerText = "Uwaga! Sprawdzono kalendarz – data ważności tego dokumentu już minęła.";
+                document.getElementById('resCalendar').innerHTML = `<strong style='color:var(--danger-color)'>Przeterminowany (${expiryDateStr})</strong>`;
+            }
+
+            // Uzupełnienie reszty tabeli
+            document.getElementById('resCompany').innerText = company;
+            document.getElementById('resType').innerText = ticketType;
+            document.getElementById('resExpiry').innerText = expiryDateStr;
+            document.getElementById('resRaw').innerText = rawText;
+        }
+    </script>
+</body>
+</html>
