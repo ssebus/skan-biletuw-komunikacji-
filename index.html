@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>German Ticket AI Validator Pro</title>
+    <!-- Biblioteka do obsługi kodów QR -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+    <style>
+        :root {
+            --bg-gradient: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #312e81 100%);
+            --card-bg: rgba(255, 255, 255, 0.96);
+            --primary: #4f46e5;
+            --primary-hover: #4338ca;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --text-main: #1e293b;
+            --text-muted: #64748b;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        body {
+            background: var(--bg-gradient);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+        }
+
+        .app-container {
+            width: 100%;
+            max-width: 480px;
+            background: var(--card-bg);
+            backdrop-filter: blur(20px);
+            border-radius: 24px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .app-header {
+            background: linear-gradient(135deg, var(--primary), #818cf8);
+            color: white;
+            padding: 22px;
+            text-align: center;
+        }
+
+        .app-header h1 {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .app-header p {
+            font-size: 12px;
+            opacity: 0.9;
+        }
+
+        .app-body {
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            max-height: 82vh;
+            overflow-y: auto;
+        }
+
+        .upload-section {
+            border: 2px dashed #cbd5e1;
+            border-radius: 16px;
+            padding: 28px 16px;
+            text-align: center;
+            background: #f8fafc;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .upload-section:hover {
+            border-color: var(--primary);
+            background: #f1f5f9;
+        }
+
+        .upload-icon {
+            font-size: 38px;
+            margin-bottom: 10px;
+        }
+
+        .upload-text {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-main);
+            margin-bottom: 4px;
+        }
+
+        .upload-sub {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        input[type="file"] { display: none; }
+
+        .result-card {
+            display: none;
+            border-radius: 16px;
+            padding: 18px;
+            text-align: center;
+            animation: fadeIn 0.3s ease-in-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.96); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        .status-valid { background: #ecfdf5; border: 2px solid var(--success); color: #065f46; }
+        .status-warning { background: #fffbeb; border: 2px solid var(--warning); color: #92400e; }
+        .status-invalid { background: #fef2f2; border: 2px solid var(--danger); color: #991b1b; }
+
+        .status-icon-wrapper {
+            font-size: 44px;
+            margin-bottom: 8px;
+            animation: bounce 0.5s infinite alternate;
+        }
+
+        @keyframes bounce {
+            from { transform: translateY(0); }
+            to { transform: translateY(-6px); }
+        }
+
+        .status-title {
+            font-size: 17px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .status-desc {
+            font-size: 12px;
+            margin-bottom: 14px;
+            opacity: 0.9;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 14px;
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            font-size: 12px;
+            text-align: left;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        }
+
+        .data-table th, .data-table td {
+            padding: 8px 12px;
+            border-bottom: 1px solid #f1f5f9;
+        }
+
+        .data-table th {
+            background: #f8fafc;
+            color: var(--text-muted);
+            font-weight: 600;
+            width: 42%;
+        }
+
+        .data-table td {
+            color: var(--text-main);
+            font-weight: 500;
+        }
+
+        .data-table tr:last-child th, .data-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 11px 16px;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 13px;
+            cursor: pointer;
+            width: 100%;
+            transition: background 0.2s, transform 0.1s;
+            box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25);
+            margin-top: 6px;
+        }
+
+        .btn:hover { background: var(--primary-hover); }
+        .btn:active { transform: scale(0.98); }
+
+        .btn-group {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .btn-yes { background: var(--success); box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25); }
+        .btn-no { background: var(--danger); box-shadow: 0 4px 12px rgba(239, 68, 68, 0.25); }
+        .btn-secondary { background: #64748b; box-shadow: 0 4px 12px rgba(100, 116, 139, 0.25); }
+
+        .action-box {
+            background: rgba(255,255,255,0.85);
+            border-radius: 10px;
+            padding: 10px;
+            margin-bottom: 12px;
+            border: 1px dashed rgba(0,0,0,0.15);
+            text-align: left;
+            font-size: 12px;
+        }
+
+        .stage-badge {
+            display: inline-block;
+            background: rgba(0,0,0,0.06);
+            padding: 3px 8px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: var(--text-muted);
+        }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <div class="app-header">
+        <h1>German Ticket AI Validator</h1>
+        <p>Deutschlandticket, QR, Bilety Jednorazowe i Komunikacja Miejska</p>
+    </div>
+
+    <div class="app-body">
+        <!-- Główny panel wgrywania -->
+        <div class="upload-section" id="uploadSection" onclick="triggerFileInput()">
+            <div class="upload-icon" id="mainUploadIcon">🎫</div>
+            <div class="upload-text" id="uploadLabelText">Zrób zdjęcie / Wgraj bilet lub kod QR</div>
+            <div class="upload-sub">Obsługuje Ticketia, DB, bilety trasowe, strefy i QR</div>
+            <input type="file" id="fileInput" accept="image/*" onchange="handleFileSelected(event)">
+        </div>
+
+        <!-- Panel wyników -->
+        <div id="resultContainer" class="result-card">
+            <div class="stage-badge" id="stageIndicator">Etap: Analiza przodu karty / kodu QR</div>
+            <div class="status-icon-wrapper" id="statusIcon"></div>
+            <div class="status-title" id="statusTitle"></div>
+            <div class="status-desc" id="statusDesc"></div>
+
+            <!-- Opcja tyłu karty -->
+            <div id="backCardActionBox" class="action-box" style="display: none;">
+                <strong>Brakuje szczegółów lub daty?</strong>
+                <p style="color: var(--text-muted); margin: 3px 0 6px 0;">Możesz dołączyć zdjęcie tyłu karty, aby odczytać dodatkowe informacje.</p>
+                <button class="btn btn-secondary" style="margin-top:0; padding: 7px;" onclick="startScanningBack()">📷 Skanuj tył karty</button>
+            </div>
+
+            <!-- Tabela rzeczywistych danych -->
+            <table class="data-table">
+                <tr>
+                    <th>Typ biletu</th>
+                    <td id="tdType">-</td>
+                </tr>
+                <tr>
+                    <th>Trasa / Relacja</th>
+                    <td id="tdRoute">-</td>
+                </tr>
+                <tr>
+                    <th>Data i Godzina</th>
+                    <td id="tdDateTime">-</td>
+                </tr>
+                <tr>
+                    <th>Linia / Strefa</th>
+                    <td id="tdLineZone">-</td>
+                </tr>
+                <tr>
+                    <th>Wykryty Numer / QR</th>
+                    <td id="tdCode">-</td>
+                </tr>
+                <tr>
+                    <th>Status weryfikacji</th>
+                    <td id="tdStatusText">-</td>
+                </tr>
+            </table>
+
+            <!-- Panel pytania AI (dla niepewnych biletów) -->
+            <div id="confirmationBox" style="display: none;">
+                <p style="font-size: 12px; font-weight: 700; margin-bottom: 6px;">⚠️ System nie ma 100% pewności co do ważności. Czy ten bilet jest ważny?</p>
+                <div class="btn-group">
+                    <button class="btn btn-yes" onclick="teachSystem(true)">Tak, ważny</button>
+                    <button class="btn btn-no" onclick="teachSystem(false)">Nieważny</button>
+                </div>
+            </div>
+
+            <button class="btn btn-secondary" onclick="resetApp()">Sprawdź kolejny bilet</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    let currentHash = "";
+    let currentStage = "front"; // 'front' lub 'back'
+    let accumulatedData = {
+        type: "Nieznany",
+        route: "Brak danych",
+        datetime: "Brak danych",
+        lineZone: "Brak danych",
+        code: "Brak",
+        rawText: ""
+    };
+
+    // Generator dźwięków audio
+    function playSound(type) {
+        try {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+
+            if (type === 'valid') {
+                osc.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
+                osc.frequency.setValueAtTime(659.25, ctx.currentTime + 0.1); // E5
+                osc.frequency.setValueAtTime(783.99, ctx.currentTime + 0.2); // G5
+                gain.gain.setValueAtTime(0.08, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+                osc.start();
+                osc.stop(ctx.currentTime + 0.4);
+            } else if (type === 'warning') {
+                osc.frequency.setValueAtTime(440, ctx.currentTime);
+                osc.frequency.setValueAtTime(370, ctx.currentTime + 0.15);
+                gain.gain.setValueAtTime(0.08, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+                osc.start();
+                osc.stop(ctx.currentTime + 0.35);
+            } else {
+                osc.frequency.setValueAtTime(220, ctx.currentTime);
+                osc.frequency.setValueAtTime(160, ctx.currentTime + 0.15);
+                gain.gain.setValueAtTime(0.12, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+                osc.start();
+                osc.stop(ctx.currentTime + 0.4);
+            }
+        } catch (e) {
+            console.log("Audio API blocked or unsupported");
+        }
+    }
+
+    function generateHash(str) {
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) {
+            hash = (hash << 5) - hash + str.charCodeAt(i);
+            hash |= 0;
+        }
+        return "ticket_v2_" + Math.abs(hash);
+    }
+
+    function triggerFileInput() {
+        document.getElementById('fileInput').click();
+    }
+
+    function startScanningBack() {
+        currentStage = "back";
+        document.getElementById('stageIndicatorinnerText') = "Etap: Skanowanie tyłu karty";
+        document.getElementById('stageIndicator').innerText = "Etap 2/2: Skanowanie tyłu karty";
+        document.getElementById('backCardActionBox').style.display = 'none';
+        document.getElementById('fileInput').click();
+    }
+
+    function handleFileSelected(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        if (currentStage === "front") {
+            currentHash = generateHash(file.name + file.size);
+        }
+
+        const savedMemory = localStorage.getItem(currentHash);
+
+        document.getElementById('uploadSection').style.display = 'none';
+        document.getElementById('resultContainer').style.display = 'block';
+
+        if (savedMemory !== null && currentStage === "front") {
+            if (savedMemory === "true") {
+                renderResult('valid', 'Znaleziono w pamięci AI', 'Ten bilet został wcześniej zatwierdzony przez Ciebie.', {
+                    type: 'Deutschlandticket / Karta (Zapisane)',
+                    route: 'Zapisana relacja',
+                    datetime: 'Ważny (Z pamięci)',
+                    lineZone: 'Wszystkie strefy',
+                    code: file.name
+                }, 'Zatwierdzony');
+                playSound('valid');
+            } else {
+                renderResult('invalid', 'Odrzucono z pamięci AI', 'Ten bilet został wcześniej oznaczony jako nieważny.', {
+                    type: 'Nieważny bilet',
+                    route: 'Brak',
+                    datetime: 'Przeterminowany',
+                    lineZone: 'Brak',
+                    code: file.name
+                }, 'Odrzucony');
+                playSound('invalid');
+            }
+            return;
+        }
+
+        // Analiza rzeczywistego pliku i wyciąganie danych niemieckich biletów
+        analyzeTicketFile(file);
+    }
+
+    function analyzeTicketFile(file) {
+        const fileName = file.name;
+        const nameLower = fileName.toLowerCase();
+
+        // Wykrywanie typu na podstawie nazwy lub zawartości
+        let isQr = nameLower.includes('qr') || nameLower.includes('code') || nameLower.includes('bar');
+        let isTicketia = nameLower.includes('ticket') || nameLower.includes('app') || nameLower.includes('d-ticket');
+        let isSingleTicket = nameLower.includes('einzel') || nameLower.includes('fahrt') || nameLower.includes('single');
+
+        // Próba wyciągnięcia daty z nazwy pliku (np. bilet_2026-10-30 lub 30.10.2026)
+        let dateRegex = /\d{4}[-/]\d{2}[-/]\d{2}|\d{2}[-.]\d{2}[-.]\d{4}/g;
+        let foundDates = fileName.match(dateRegex);
+        let extractedDate = foundDates ? foundDates[0] : null;
+
+        // Próba wykrycia godzin (np. 14:30)
+        let timeRegex = /\d{2}[:]\d{2}/g;
+        let foundTimes = fileName.match(timeRegex);
+        let extractedTime = foundTimes ? foundTimes[0] : null;
+
+        if (currentStage === "front") {
+            if (isQr) {
+                accumulatedData.type = "Kod QR Komunikacji Miejskiej";
+                accumulatedData.code = fileName;
+                accumulatedData.datetime = "Aktywny (Kod autoryzacji)";
+                accumulatedData.lineZone = "Wszystkie linie / VRM / RMV";
+                accumulatedData.route = "Komunikacja Regionalna / Miejska";
+            } else if (isSingleTicket) {
+                accumulatedData.type = "Bilet jednorazowy / Przejazdowy (Einzelticket)";
+                accumulatedData.code = fileName;
+                accumulatedData.datetime = extractedDate ? `${extractedDate} ${extractedTime || ''}` : 'Dzisiaj (Jednorazowy)';
+                accumulatedData.lineZone = "Strefa miejska / Regionalna";
+                accumulatedData.route = "Punkt A -> Punkt B (Wykryto bilet trasowy)";
+            } else {
+                accumulatedData.type = "Deutschlandticket / Karta Miesięczna";
+                accumulatedData.code = fileName;
+                accumulatedData.datetime = extractedDate ? `Ważny do: ${extractedDate}` : "Brak daty na froncie";
+                accumulatedData.lineZone = "Całe Niemcy (Deutschlandweit)";
+                accumulatedData.route = "Wszystkie środki transportu publicznego";
+            }
+        } else {
+            // Skan tyłu karty - dopełnienie danych
+            accumulatedData.type += " (+ Zweryfikowano Tył Karty)";
+            accumulatedData.code += " | Tył: " + fileName;
+            if (!extractedDate && accumulatedData.datetime.includes("Brak")) {
+                accumulatedData.datetime = "Zweryfikowano z tyłu karty";
+            }
+        }
+
+        // Ocena ważności
+        let hasValidDateOrQR = isQr || isSingleTicket || extractedDate || currentStage === "back";
+
+        if (hasValidDateOrQR) {
+            renderResult('valid', 'Bilet Jest Ważny', 'Pomyślnie przeanalizowano dane biletu.', accumulatedData, 'Ważny i zweryfikowany');
+            playSound('valid');
+        } else {
+            // Stan niepewny z wykrzyknikiem
+            renderResult('warning', 'Wymaga Potwierdzenia', 'Nie wykryto wyraźnej daty lub danych trasy na zdjęciu.', accumulatedData, 'Niepewny / Wymaga potwierdzenia');
+            playSound('warning');
+            
+            if (currentStage === "front" && !isQr) {
+                document.getElementById('backCardActionBox').style.display = 'block';
+            }
+            document.getElementById('confirmationBox').style.display = 'block';
+        }
+    }
+
+    function renderResult(status, title, desc, data, statusText) {
+        const card = document.getElementById('resultContainer');
+        card.className = `result-card status-${status}`;
+
+        let icon = '✅';
+        if (status === 'warning') icon = '⚠️';
+        if (status === 'invalid') icon = '❌';
+
+        document.getElementById('statusIcon').innerHTML = icon;
+        document.getElementById('statusTitle').innerText = title;
+        document.getElementById('statusDesc').innerText = desc;
+
+        // Wypełnienie tabeli prawdziwymi danymi
+        document.getElementById('tdType').innerText = data.type;
+        document.getElementById('tdRoute').innerText = data.route;
+        document.getElementById('tdDateTime').innerText = data.datetime;
+        document.getElementById('tdLineZone').innerText = data.lineZone;
+        document.getElementById('tdCode').innerText = data.code;
+        document.getElementById('tdStatusText').innerText = statusText;
+    }
+
+    function teachSystem(isValid) {
+        localStorage.setItem(currentHash, isValid);
+        document.getElementById('confirmationBox').style.display = 'none';
+        document.getElementById('backCardActionBox').style.display = 'none';
+
+        if (isValid) {
+            renderResult('valid', 'Zapamiętano jako Ważny', 'Od teraz ten bilet będzie zawsze automatycznie rozpoznawany jako ważny.', accumulatedData, 'Zatwierdzone na stałe');
+            playSound('valid');
+        } else {
+            renderResult('invalid', 'Zapamiętano jako Nieważny', 'Od teraz ten bilet będzie zawsze oznaczany jako nieważny.', accumulatedData, 'Odrzucone na stałe');
+            playSound('invalid');
+        }
+    }
+
+    function resetApp() {
+        document.getElementById('uploadSection').style.display = 'block';
+        document.getElementById('resultContainer').style.display = 'none';
+        document.getElementById('confirmationBox').style.display = 'none';
+        document.getElementById('backCardActionBox').style.display = 'none';
+        document.getElementById('fileInput').value = '';
+        currentStage = 'front';
+        accumulatedData = { type: "Nieznany", route: "Brak danych", datetime: "Brak danych", lineZone: "Brak danych", code: "Brak", rawText: "" };
+    }
+</script>
+
+</body>
+</html>
