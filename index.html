@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>True Pass & Deutschlandticket Analyzer</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --accent: #3b82f6;
+            --success: #22c55e;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 25px;
+        }
+
+        header h1 {
+            font-size: 1.8rem;
+            margin-bottom: 5px;
+            color: #60a5fa;
+        }
+
+        header p {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 650px;
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #93c5fd;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        textarea {
+            width: 100%;
+            height: 100px;
+            background: #0f172a;
+            border: 1px solid #475569;
+            border-radius: 8px;
+            padding: 12px;
+            color: white;
+            font-size: 0.95rem;
+            resize: vertical;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .btn {
+            background: var(--accent);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            width: 100%;
+            transition: background 0.2s;
+        }
+
+        .btn:hover {
+            background: #2563eb;
+        }
+
+        /* ANIMOWANE SKINY STATUSÓW */
+        .status-badge {
+            padding: 15px;
+            border-radius: 12px;
+            text-align: center;
+            font-weight: bold;
+            font-size: 1.1rem;
+            margin: 20px 0;
+            display: none;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .status-badge.valid {
+            background: rgba(34, 197, 94, 0.15);
+            color: var(--success);
+            border: 2px solid var(--success);
+            animation: pulse-green 2s infinite;
+            display: block;
+        }
+
+        .status-badge.invalid {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--danger);
+            border: 2px solid var(--danger);
+            animation: pulse-red 2s infinite;
+            display: block;
+        }
+
+        .status-badge.uncertain {
+            background: rgba(245, 158, 11, 0.15);
+            color: var(--warning);
+            border: 2px solid var(--warning);
+            animation: pulse-orange 2s infinite;
+            display: block;
+        }
+
+        @keyframes pulse-green {
+            0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4); }
+            70% { box-shadow: 0 0 0 12px rgba(34, 197, 94, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+        }
+
+        @keyframes pulse-red {
+            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+            70% { box-shadow: 0 0 0 12px rgba(239, 68, 68, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+
+        @keyframes pulse-orange {
+            0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4); }
+            70% { box-shadow: 0 0 0 12px rgba(245, 158, 11, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+        }
+
+        /* TABELA WYNIKÓW */
+        .data-table-container {
+            display: none;
+            overflow-x: auto;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #0f172a;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .data-table th, .data-table td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #334155;
+            font-size: 0.9rem;
+        }
+
+        .data-table th {
+            background: #1e293b;
+            color: var(--text-secondary);
+            font-weight: 600;
+        }
+
+        .data-table td:first-child {
+            font-weight: bold;
+            color: #93c5fd;
+            width: 40%;
+        }
+
+        .examples {
+            margin-top: 15px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .ex-btn {
+            background: #334155;
+            color: #cbd5e1;
+            border: none;
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            cursor: pointer;
+        }
+
+        .ex-btn:hover {
+            background: #475569;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>True Ticket Parser</h1>
+        <p>Analizator biletów (Deutsche Bahn, Deutschlandticket, VRM)</p>
+    </header>
+
+    <div class="container">
+        <div class="input-group">
+            <label for="ticketText">Wklej tekst z biletu (lub dane z OCR):</label>
+            <textarea id="ticketText" placeholder="Np. Deutschlandticket, Fetracks, DB Regio, Gültig bis 31.10.2026..."></textarea>
+            <div class="examples">
+                <span style="font-size: 0.8rem; color: var(--text-secondary); align-self: center;">Przykłady prawdy:</span>
+                <button class="ex-btn" onclick="setExample(1)">Deutschlandticket (Ważny)</button>
+                <button class="ex-btn" onclick="setExample(2)">Stary bilet DB (Przeterminowany)</button>
+                <button class="ex-btn" onclick="setExample(3)">Bilet bez trasy (Tylko nazwisko)</button>
+            </div>
+        </div>
+
+        <button class="btn" onclick="analyzeTicket()">Analizuj i weryfikuj bilet</button>
+
+        <div id="statusBadge" class="status-badge"></div>
+
+        <div id="dataTableContainer" class="data-table-container">
+            <table class="data-table">
+                <tbody id="tableBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        function setExample(type) {
+            const ta = document.getElementById('ticketText');
+            if (type === 1) {
+                ta.value = "Deutschlandticket\nFahrgast: Fetracks\nDB Regio AG\nGültig: 01.10.2026 - 31.10.2026\nVon: Bad Breisig Nach: Bonn Hbf";
+            } else if (type === 2) {
+                ta.value = "Fahrkarte Deutsche Bahn\nName: Fetracks\nGültig bis: 15.05.2024\nKöln Hbf - Frankfurt";
+            } else if (type === 3) {
+                ta.value = "VRM Monatskarte\nInhaber: Fetracks\nNur Ticket ohne Ortsangabe";
+            }
+        }
+
+        function analyzeTicket() {
+            const rawText = document.getElementById('ticketText').value.trim();
+            if (!rawText) {
+                alert("Najpierw wpisz lub wklej tekst z biletu!");
+                return;
+            }
+
+            const lines = rawText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+            const extracted = {};
+            let lowerFull = rawText.toLowerCase();
+
+            // 1. Sprawdzanie wydawcy
+            if (lowerFull.includes("deutsche bahn") || lowerFull.includes("db") || lowerFull.includes("db regio")) {
+                extracted["Wydawca"] = "Deutsche Bahn (DB)";
+            } else if (lowerFull.includes("vrm")) {
+                extracted["Wydawca"] = "VRM (Verkehrsverbund Rhein-Mosel)";
+            }
+
+            // 2. Typ biletu (szukanie Deutschlandticket itp.)
+            if (lowerFull.includes("deutschlandticket") || lowerFull.includes("d-ticket")) {
+                extracted["Typ biletu"] = "Deutschlandticket";
+            } else if (lowerFull.includes("monatskarte")) {
+                extracted["Typ biletu"] = "Bilet miesięczny (Monatskarte)";
+            } else if (lowerFull.includes("fahrkarte")) {
+                extracted["Typ biletu"] = "Bilet / Fahrkarte";
+            }
+
+            // 3. Przeszukiwanie linii w poszczególnych informacjach
+            let foundFrom = null;
+            let foundTo = null;
+            let foundName = null;
+            let expiryDateStr = null;
+
+            for (let line of lines) {
+                let lowerLine = line.toLowerCase();
+
+                // Imię / Nazwisko / Fahrgast / Inhaber
+                if (lowerLine.includes("fahrgast") || lowerLine.includes("name") || lowerLine.includes("inhaber")) {
+                    foundName = line.replace(/(fahrgast|name|inhaber)[:\s]*/gi, '').trim();
+                }
+
+                // Skąd (Von)
+                if (lowerLine.startsWith("von")) {
+                    foundFrom = line.replace(/^von[:\s]*/i, '').trim();
+                }
+
+                // Dokąd (Nach)
+                if (lowerLine.startsWith("nach")) {
+                    foundTo = line.replace(/^nach[:\s]*/i, '').trim();
+                }
+            }
+
+            // Jeśli nie znaleziono przez prefiks "Von/Nach", szukamy formatu "Trasa - Trasa" w linijkach
+            for (let line of lines) {
+                if (line.includes(" - ") && !line.toLowerCase().includes("gültig")) {
+                    let parts = line.split(" - ");
+                    if (!foundFrom) foundFrom = parts[0].trim();
+                    if (!foundTo) foundTo = parts[1].trim();
+                }
+            }
+
+            // Przypisanie do tabeli TYLKO JEŚLI FAKTYCZNIE ISTNIEJĄ
+            if (foundName) {
+                extracted["Imię i Nazwisko"] = foundName;
+            } else if (lowerFull.includes("fetracks")) {
+                // Bezpośrednie wyłapanie nazwy użytkownika z kontekstu, jeśli występuje
+                extracted["Imię i Nazwisko"] = "Fetracks";
+            }
+
+            if (foundFrom) extracted["Skąd"] = foundFrom;
+            if (foundTo) extracted["Dokąd"] = foundTo;
+
+            // 4. Szukanie dat ważności (np. 31.10.2026)
+            const dateRegex = /\b(0[1-9]|[12][0-9]|3[01])\.(0[1-9]|1[0-2])\.20[2-9][0-9]\b/g;
+            const dates = rawText.match(dateRegex);
+            
+            let status = "valid";
+            let statusText = "🟢 Bilet Ważny";
+
+            if (dates && dates.length > 0) {
+                // Bierzemy ostatnią datę jako datę końca ważności (Gültig bis / Ende)
+                const expiryStr = dates[dates.length - 1];
+                extracted["Ważny do"] = expiryStr;
+
+                // Konwersja i faktyczne porównanie z dzisiejszą datą (15 października 2026)
+                const parts = expiryStr.split('.');
+                const expDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+                const today = new Date();
+
+                if (expDate < today) {
+                    status = "invalid";
+                    statusText = "🔴 Bilet Nieważny (Minęła data ważności!)";
+                }
+            } else {
+                // Jeśli brak daty, a to Deutschlandticket, uznajemy domyślnie, że trzeba zweryfikować lub brak daty
+                status = "uncertain";
+                statusText = "🟠 Niepewny odczyt / Brak daty ważności";
+            }
+
+            // Renderowanie tabeli
+            renderTable(extracted, status, statusText);
+        }
+
+        function renderTable(data, status, statusText) {
+            const badge = document.getElementById('statusBadge');
+            badge.className = `status-badge ${status}`;
+            badge.innerText = statusText;
+
+            const tableBody = document.getElementById('tableBody');
+            tableBody.innerHTML = '';
+
+            for (const [key, value] of Object.entries(data)) {
+                const row = document.createElement('tr');
+                // Format żądany przez Ciebie: Klucz + dwukropek + wartość w tabeli
+                row.innerHTML = `<td>${key}:</td><td>${value}</td>`;
+                tableBody.appendChild(row);
+            }
+
+            if (Object.keys(data).length === 0) {
+                const row = document.createElement('tr');
+                row.innerHTML = `<td>Błąd:</td><td>Nie wykryto żadnych rozpoznawalnych danych biletowych w tekście.</td>`;
+                tableBody.appendChild(row);
+                badge.className = "status-badge uncertain";
+                badge.statusText = "🟠 Niepewny odczyt";
+            }
+
+            document.getElementById('dataTableContainer').style.display = 'block';
+        }
+    </script>
+</body>
+</html>
