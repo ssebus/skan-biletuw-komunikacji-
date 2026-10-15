@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Strict Transit Pass Inspector</title>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <style>
+        :root {
+            --bg: #05070b;
+            --panel: #0f172a;
+            --border: #334155;
+            --accent: #2563eb;
+            --success: #16a34a;
+            --danger: #dc2626;
+            --warning: #ca8a04;
+            --text: #f8fafc;
+            --muted: #94a3b8;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 16px;
+        }
+
+        h1 { font-size: 1.1rem; margin-bottom: 2px; text-align: center; }
+        p.sub { font-size: 0.7rem; color: var(--muted); margin-bottom: 12px; text-align: center; }
+
+        .container {
+            width: 100%;
+            max-width: 400px;
+            background: var(--panel);
+            border-radius: 14px;
+            padding: 14px;
+            border: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .camera-box {
+            position: relative;
+            width: 100%;
+            height: 220px;
+            background: #000;
+            border-radius: 10px;
+            overflow: hidden;
+            border: 2px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        video, canvas {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            position: absolute;
+        }
+
+        .viewfinder-frame {
+            position: absolute;
+            width: 70%;
+            height: 100px;
+            border: 2px dashed var(--accent);
+            border-radius: 6px;
+            pointer-events: none;
+        }
+
+        .status-badge {
+            padding: 12px;
+            border-radius: 8px;
+            font-weight: 700;
+            text-align: center;
+            font-size: 1rem;
+            display: none;
+        }
+        .status-badge.valid { background: var(--success); color: white; }
+        .status-badge.invalid { background: var(--danger); color: white; }
+        .status-badge.unknown { background: var(--warning); color: #000; }
+
+        .result-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.8rem;
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 6px;
+            overflow: hidden;
+            display: none;
+        }
+        .result-table th, .result-table td {
+            padding: 7px 10px;
+            border-bottom: 1px solid var(--border);
+            text-align: left;
+        }
+        .result-table th { color: var(--muted); width: 38%; font-weight: 500; }
+        .result-table td { color: #fff; font-weight: 600; }
+        .result-table tr:last-child td { border-bottom: none; }
+
+        .btn-group { display: flex; gap: 6px; }
+        button {
+            flex: 1;
+            background: var(--accent);
+            color: white;
+            border: none;
+            padding: 10px;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 0.85rem;
+            cursor: pointer;
+        }
+        button.secondary { background: #475569; }
+        button.danger { background: var(--danger); }
+
+        textarea {
+            width: 100%;
+            background: #05070b;
+            border: 1px solid var(--border);
+            color: #fff;
+            padding: 8px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            resize: vertical;
+            height: 50px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Strict Ticket Inspector</h1>
+    <p class="sub">Pokazuje wyłącznie to, co fizycznie wykryje w kodzie. Żadnego zgadywania.</p>
+
+    <div class="container">
+        <div class="camera-box">
+            <video id="videoElem" autoplay playsinline muted></video>
+            <canvas id="canvasElem" style="display:none;"></canvas>
+            <div class="viewfinder-frame"></div>
+            <div id="camHint" style="position:absolute; color:var(--muted); font-size:0.75rem; z-index:5; text-align:center; padding:0 15px;">
+                Skieruj aparat na kod QR biletu lub karty
+            </div>
+        </div>
+
+        <div id="statusBadge" class="status-badge">Oczekiwanie na skan...</div>
+
+        <table id="resultTable" class="result-table">
+            <tbody id="tableBody"></tbody>
+        </table>
+
+        <div class="btn-group">
+            <button id="btnScan" onclick="toggleCam()">Start Skanera</button>
+            <button class="secondary" onclick="testReal('correct')">Test: Prawidłowy D-Ticket</button>
+        </div>
+        <div class="btn-group">
+            <button class="secondary" onclick="testReal('expired')">Test: Przeterminowany</button>
+            <button class="secondary" onclick="testReal('garbage')">Test: Nieznany kod (Śmieci)</button>
+        </div>
+
+        <div>
+            <textarea id="manualText" placeholder="Lub wklej surowy tekst z kodu..."></textarea>
+            <button class="secondary" onclick="processManual()" style="width:150px; margin-top:4px; padding:6px;">Sprawdź wklejone</button>
+        </div>
+    </div>
+
+    <script>
+        let video = document.getElementById('videoElem');
+        let canvas = document.getElementById('canvasElem');
+        let ctx = canvas.getContext('2d');
+        let scanning = false;
+        let animFrame = null;
+
+        // Sztywna, aktualna data referencyjna: 15 października 2026
+        const CURRENT_DATE = new Date(2026, 9, 15);
+
+        function playSound(type) {
+            try {
+                let ac = new (window.AudioContext || window.webkitAudioContext)();
+                let osc = ac.createOscillator();
+                let g = ac.createGain();
+                osc.connect(g); g.connect(ac.destination);
+                if(type === 'valid') {
+                    osc.frequency.setValueAtTime(600, ac.currentTime);
+                    osc.frequency.setValueAtTime(800, ac.currentTime + 0.1);
+                    g.gain.setValueAtTime(0.1, ac.currentTime);
+                    osc.start(); osc.stop(ac.currentTime + 0.25);
+                } else if(type === 'invalid') {
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(140, ac.currentTime);
+                    g.gain.setValueAtTime(0.12, ac.currentTime);
+                    osc.start(); osc.stop(ac.currentTime + 0.3);
+                } else {
+                    osc.frequency.setValueAtTime(300, ac.currentTime);
+                    g.gain.setValueAtTime(0.1, ac.currentTime);
+                    osc.start(); osc.stop(ac.currentTime + 0.2);
+                }
+            } catch(e) {}
+        }
+
+        async function toggleCam() {
+            if (scanning) {
+                stopCam();
+            } else {
+                try {
+                    let stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+                    video.srcObject = stream;
+                    video.play();
+                    document.getElementById('camHint').style.display = 'none';
+                    document.getElementById('btnScan').innerText = 'Zatrzymaj';
+                    document.getElementById('btnScan').className = 'danger';
+                    scanning = true;
+                    requestAnimationFrame(tick);
+                } catch(e) {
+                    alert("Brak dostępu do kamery.");
+                }
+            }
+        }
+
+        function stopCam() {
+            if (video.srcObject) {
+                video.srcObject.getTracks().forEach(t => t.stop());
+                video.srcObject = null;
+            }
+            if (animFrame) cancelAnimationFrame(animFrame);
+            scanning = false;
+            document.getElementById('camHint').style.display = 'block';
+            document.getElementById('btnScan').innerText = 'Start Skanera';
+            document.getElementById('btnScan').className = '';
+        }
+
+        function tick() {
+            if (!scanning) return;
+            if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                let img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                let qr = jsQR(img.data, img.width, img.height);
+                if (qr) {
+                    parseStrictData(qr.data);
+                    setTimeout(() => { if(scanning) requestAnimationFrame(tick); }, 3000);
+                    return;
+                }
+            }
+            animFrame = requestAnimationFrame(tick);
+        }
+
+        function testReal(type) {
+            if (type === 'correct') {
+                parseStrictData("DTICKET: SubID=99382104; Name=Jan Kowalski; ValidUntil=15.10.2026");
+            } else if (type === 'expired') {
+                parseStrictData("FAHRKARTE: TicketNo=44219; ValidUntil=10.05.2024");
+            } else if (type === 'garbage') {
+                parseStrictData("https://www.google.com/search?q=random_qr_code");
+            }
+        }
+
+        function processManual() {
+            let val = document.getElementById('manualText').value;
+            if (val) parseStrictData(val);
+        }
+
+        // STRICT PARSER: Zero domysłów. Pokazuje tylko to, co znajdzie w napisie.
+        function parseStrictData(text) {
+            let fields = {};
+            let foundValidDate = null;
+            let status = "unknown";
+
+            // 1. Sprawdź czy w tekście jest wyraźny klucz biletowy
+            let isTicketCode = text.includes("TICKET") || text.includes("FAHRKARTE") || text.includes("Valid") || text.includes("SubID");
+
+            if (!isTicketCode) {
+                // To nie jest bilet (np. losowy link lub QR z gazety)
+                renderResult("unknown", { "Surowy odczyt": text, "Błąd": "Kod nie jest rozpoznany jako bilet transportowy" });
+                return;
+            }
+
+            // 2. Wyciągnij numer subskrypcji / ID (jeśli istnieje w tekście)
+            let subMatch = text.match(/(?:SubID|TicketNo|ID)[:\s]+([A-Za-z0-9\-]+)/i);
+            if (subMatch) {
+                fields["Numer / ID"] = subMatch[1];
+            }
+
+            // 3. Wyciągnij nazwisko (tylko jeśli fizycznie wpisano je w kodzie)
+            let nameMatch = text.match(/Name[:\s]+([A-Za-zĄĆĘŁŃÓŚŹŻąćęłńóśźż\s]+)(?:;|$)/i);
+            if (nameMatch) {
+                fields["Pasażer"] = nameMatch[1].trim();
+            }
+
+            // 4. Szukaj daty ważności w formacie DD.MM.YYYY
+            let dateRegex = /(\d{2})\.(\d{2})\.(\d{4})/g;
+            let match = dateRegex.exec(text);
+
+            if (match) {
+                let day = parseInt(match[1]);
+                let month = parseInt(match[2]) - 1;
+                let year = parseInt(match[3]);
+                let ticketDate = new Date(year, month, day, 23, 59, 59);
+
+                fields["Data z kodu"] = `${match[1]}.${match[2]}.${match[3]}`;
+
+                // Rygorystyczne porównanie z dzisiejszym dniem (15.10.2026)
+                if (ticketDate >= CURRENT_DATE) {
+                    status = "valid";
+                    fields["Weryfikacja"] = "Ważny (Data aktualna lub przyszła)";
+                } else {
+                    status = "invalid";
+                    fields["Weryfikacja"] = "MINĄŁ TERMIN WAŻNOŚCI!";
+                }
+            } else {
+                status = "unknown";
+                fields["Weryfikacja"] = "Brak czytelnej daty w kodzie!";
+            }
+
+            renderResult(status, fields);
+        }
+
+        function renderResult(status, fields) {
+            let badge = document.getElementById('statusBadge');
+            badge.style.display = 'block';
+            badge.className = 'status-badge ' + status;
+
+            if (status === 'valid') {
+                badge.innerText = '✅ GIT – BILET WAŻNY';
+                playSound('valid');
+            } else if (status === 'invalid') {
+                badge.innerText = '❌ NIEWAŻNY – TERMIN MINĄŁ';
+                playSound('invalid');
+            } else {
+                badge.innerText = '⚠️ NIE WIEM – WYMAGANY SPRAWDZENIE';
+                playSound('unknown');
+            }
+
+            let tbody = document.getElementById('tableBody');
+            tbody.innerHTML = '';
+
+            for (let [key, val] of Object.entries(fields)) {
+                tbody.innerHTML += `<tr><th>${key}</th><td>${val}</td></tr>`;
+            }
+
+            document.getElementById('resultTable').style.display = 'table';
+        }
+    </script>
+</body>
+</html>
